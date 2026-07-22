@@ -39,6 +39,11 @@ frame := tuikit.New(
 tea.NewProgram(frame).Run()
 ```
 
+## Docs
+
+- [docs/examples.md](docs/examples.md) — copy-paste snippets for every component.
+- Package overview / API reference: `go doc github.com/antonikliment/tuikit`.
+
 ## Demo
 
 ```sh
