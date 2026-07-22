@@ -5,6 +5,18 @@ chrome you rebuild in every terminal app — a numbered page wrapper with
 navigation, chip tabs, and bordered panels — decoupled from any one app and
 driven by a swappable theme.
 
+## Screenshots
+
+From the demo (`go run ./examples/demo`):
+
+| Panels — chip sub-tabs + focused panel | Search — live filter, page-nav suppressed |
+| --- | --- |
+| ![Panels page](docs/screenshots/1-panels.png) | ![Search page](docs/screenshots/4-search.png) |
+
+| Reader — scrolling viewport | About — layout helpers |
+| --- | --- |
+| ![Reader page](docs/screenshots/2-reader.png) | ![About page](docs/screenshots/3-about.png) |
+
 ## Components
 
 - **`Frame`** — a stateful `tea.Model` that hosts a list of pages, renders a
