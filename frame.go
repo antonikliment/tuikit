@@ -30,6 +30,7 @@ type InputCapturer interface {
 // Level classifies footer status text.
 type Level int
 
+// Footer status levels, used to color the status line.
 const (
 	LevelInfo Level = iota
 	LevelSuccess
@@ -40,17 +41,32 @@ const (
 // the default "Ready".
 type StatusFunc func() (text string, level Level)
 
+// GlobalKeyFunc handles app-wide keys before they reach the active page (but
+// after Quit, and only when the active page is not capturing input). Return
+// handled=true to consume the key; the returned command, if any, is run.
+type GlobalKeyFunc func(msg tea.KeyPressMsg) (cmd tea.Cmd, handled bool)
+
+// SetThemeMsg re-themes the Frame's chrome at runtime. Send it with SetTheme.
+type SetThemeMsg struct{ Theme Theme }
+
+// SetTheme returns a command that re-themes the Frame. Pages that want to
+// follow suit should share a *Theme the app mutates alongside sending this.
+func SetTheme(theme Theme) tea.Cmd {
+	return func() tea.Msg { return SetThemeMsg{Theme: theme} }
+}
+
 // Frame is the stateful page wrapper: a numbered header, a body delegated to
 // the active Page, and a status footer. It implements tea.Model, so it can be
 // handed straight to tea.NewProgram.
 type Frame struct {
-	theme   Theme
-	brand   string
-	tagline string
-	pages   []Page
-	active  int
-	keys    KeyMap
-	status  StatusFunc
+	theme      Theme
+	brand      string
+	tagline    string
+	pages      []Page
+	active     int
+	keys       KeyMap
+	status     StatusFunc
+	globalKeys GlobalKeyFunc
 
 	width  int
 	height int
@@ -76,6 +92,9 @@ func WithStatus(status StatusFunc) Option { return func(f *Frame) { f.status = s
 // WithKeyMap overrides the navigation bindings.
 func WithKeyMap(k KeyMap) Option { return func(f *Frame) { f.keys = k } }
 
+// WithGlobalKeys registers an app-wide key handler (theme toggle, help, etc.).
+func WithGlobalKeys(fn GlobalKeyFunc) Option { return func(f *Frame) { f.globalKeys = fn } }
+
 // New builds a Frame. Defaults: DefaultTheme, DefaultKeyMap, 120x32 until the
 // first WindowSizeMsg.
 func New(opts ...Option) *Frame {
@@ -89,6 +108,9 @@ func New(opts ...Option) *Frame {
 // Theme returns the frame's theme, handy for pages that want to match it.
 func (f *Frame) Theme() Theme { return f.theme }
 
+// SetTheme re-themes the Frame's chrome immediately.
+func (f *Frame) SetTheme(theme Theme) { f.theme = theme }
+
 // ActivePage returns the current page index.
 func (f *Frame) ActivePage() int { return f.active }
 
@@ -101,11 +123,19 @@ func (f *Frame) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		f.width, f.height = msg.Width, msg.Height
 		return f, nil
+	case SetThemeMsg:
+		f.SetTheme(msg.Theme)
+		return f, nil
 	case tea.KeyPressMsg:
 		if key.Matches(msg, f.keys.Quit) {
 			return f, tea.Quit
 		}
 		if !f.activeCapturingInput() {
+			if f.globalKeys != nil {
+				if cmd, handled := f.globalKeys(msg); handled {
+					return f, cmd
+				}
+			}
 			if idx, ok := pageDigit(msg.String()); ok && idx < len(f.pages) {
 				f.active = idx
 				return f, nil

@@ -1,0 +1,26 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - revive
+    - misspell
+    - unconvert
+    - unparam
+    - gocritic
+    - bodyclose
+    - nilerr
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # Tests use unchecked renders and helper doubles freely.
+      - path: _test\.go
+        linters:
+          - unparam
+          - revive
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
