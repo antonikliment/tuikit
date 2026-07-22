@@ -67,18 +67,11 @@ func (p *panelsPage) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (p *panelsPage) View(width, height int) string {
-	strip := p.theme.TabStrip(p.titles, p.accents, p.focus)
 	body := fmt.Sprintf(
 		"Focused sub-tab: %s\n\nTab / Shift+Tab  cycle sub-tabs (%d of them)\n1 – 4            switch pages",
 		p.titles[p.focus], len(p.titles),
 	)
-	panel := tuikit.Panel{
-		Theme:  p.theme,
-		Accent: p.accents[p.focus],
-		Width:  width,
-		Height: max(3, height-3), // strip is 2 lines tall (tab border + label)
-	}.Render(body)
-	return lipgloss.JoinVertical(lipgloss.Left, strip, panel)
+	return p.theme.TabbedPanel(p.titles, p.accents, p.focus, width, max(6, height-1), body)
 }
 
 // --- Reader page: a scrolling viewport of lorem ipsum ---

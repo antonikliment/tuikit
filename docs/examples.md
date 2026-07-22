@@ -67,6 +67,34 @@ func (p *homePage) View(width, height int) string {
 }
 ```
 
+## Tabs joined to a panel (TabbedPanel)
+
+`TabbedPanel` renders the tab row and content panel as one connected shape — the
+active tab opens directly into the panel (no dividing line), both in the active
+tab's accent color. This is what the demo's Panels page uses.
+
+```go
+func (p *page) View(width, height int) string {
+	titles  := []string{"Alpha", "Beta", "Gamma"}
+	accents := []color.Color{p.theme.Cyan, p.theme.Green, p.theme.Yellow}
+	body    := "…page content…"
+	return p.theme.TabbedPanel(titles, accents, p.focus, width, height, body)
+}
+
+func (p *page) Update(msg tea.Msg) tea.Cmd {
+	if k, ok := msg.(tea.KeyPressMsg); ok {
+		n := 3
+		switch k.String() {
+		case "tab":       p.focus = (p.focus + 1) % n
+		case "shift+tab": p.focus = (p.focus + n - 1) % n
+		}
+	}
+	return nil
+}
+```
+
+If you only want the tab chips (no attached panel), use `TabStrip` instead.
+
 ## Sub-tabs with TabStrip
 
 `TabStrip` renders a chip row — the active chip is filled with its accent, the

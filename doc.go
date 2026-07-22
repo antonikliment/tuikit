@@ -26,7 +26,9 @@
 //
 // Pages assemble their bodies from the theme-driven helpers:
 //
-//   - [Theme.TabStrip] — a row of active/inactive chip tabs for sub-navigation.
+//   - [Theme.TabbedPanel] — a row of tabs joined seamlessly to a content panel;
+//     the active tab opens into the panel with no dividing line.
+//   - [Theme.TabStrip] — just the row of active/inactive tab chips.
 //   - [Theme.PanelStyle] and [Panel] — bordered panels with a focused state.
 //   - [Theme.StatusTitle], [Theme.Rule], [Field], [VerticalSlice], [Flow] —
 //     layout helpers.

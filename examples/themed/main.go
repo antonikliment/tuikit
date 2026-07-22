@@ -138,8 +138,6 @@ func (p *panelsPage) Update(msg tea.Msg) tea.Cmd {
 func (p *panelsPage) View(width, height int) string {
 	t := *p.theme
 	accents := []color.Color{t.Cyan, t.Green, t.Yellow}
-	strip := t.TabStrip(p.titles, accents, p.focus)
 	body := fmt.Sprintf("Focused sub-tab: %s\n\nTab cycles sub-tabs; press t to re-theme everything.", p.titles[p.focus])
-	panel := tuikit.Panel{Theme: t, Accent: accents[p.focus], Width: width, Height: max(3, height-3)}.Render(body)
-	return lipgloss.JoinVertical(lipgloss.Left, strip, panel)
+	return t.TabbedPanel(p.titles, accents, p.focus, width, max(6, height-1), body)
 }
