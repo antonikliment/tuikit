@@ -19,6 +19,25 @@ func TestTabStripShowsAllTitles(t *testing.T) {
 	}
 }
 
+func TestTabStripActiveHasThreeSidedBorder(t *testing.T) {
+	theme := DefaultTheme()
+	accents := []color.Color{theme.Cyan, theme.Green}
+	out := ansi.Strip(theme.TabStrip([]string{"One", "Two"}, accents, 0))
+
+	// Active tab has a top border with corners (left/top/right) ...
+	for _, want := range []string{"┌", "┐", "│"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("active tab missing border char %q:\n%s", want, out)
+		}
+	}
+	// ... but is open at the bottom (no bottom corners).
+	for _, absent := range []string{"└", "┘"} {
+		if strings.Contains(out, absent) {
+			t.Fatalf("active tab should have no bottom border, found %q:\n%s", absent, out)
+		}
+	}
+}
+
 func TestTabStripActiveDiffersFromInactive(t *testing.T) {
 	theme := DefaultTheme()
 	titles := []string{"One", "Two"}
@@ -29,10 +48,13 @@ func TestTabStripActiveDiffersFromInactive(t *testing.T) {
 	if active0 == active1 {
 		t.Fatal("active index should change the rendered chips")
 	}
-	// The active chip carries styling (escape sequences) even though the plain
-	// text is identical.
-	if ansi.Strip(active0) != ansi.Strip(active1) {
-		t.Fatal("only styling should differ, not the text")
+	// Both titles are present regardless of which is active.
+	for _, out := range []string{active0, active1} {
+		for _, title := range titles {
+			if !strings.Contains(ansi.Strip(out), title) {
+				t.Fatalf("strip missing %q: %q", title, ansi.Strip(out))
+			}
+		}
 	}
 	if !strings.Contains(active0, "\x1b[") {
 		t.Fatal("active chip should be styled with escape sequences")

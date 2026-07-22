@@ -140,6 +140,6 @@ func (p *panelsPage) View(width, height int) string {
 	accents := []color.Color{t.Cyan, t.Green, t.Yellow}
 	strip := t.TabStrip(p.titles, accents, p.focus)
 	body := fmt.Sprintf("Focused sub-tab: %s\n\nTab cycles sub-tabs; press t to re-theme everything.", p.titles[p.focus])
-	panel := tuikit.Panel{Theme: t, Accent: accents[p.focus], Focused: true, Width: width, Height: max(3, height-2)}.Render(body)
+	panel := tuikit.Panel{Theme: t, Accent: accents[p.focus], Width: width, Height: max(3, height-3)}.Render(body)
 	return lipgloss.JoinVertical(lipgloss.Left, strip, panel)
 }

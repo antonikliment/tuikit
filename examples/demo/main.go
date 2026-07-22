@@ -73,11 +73,10 @@ func (p *panelsPage) View(width, height int) string {
 		p.titles[p.focus], len(p.titles),
 	)
 	panel := tuikit.Panel{
-		Theme:   p.theme,
-		Accent:  p.accents[p.focus],
-		Focused: true,
-		Width:   width,
-		Height:  max(3, height-2),
+		Theme:  p.theme,
+		Accent: p.accents[p.focus],
+		Width:  width,
+		Height: max(3, height-3), // strip is 2 lines tall (tab border + label)
 	}.Render(body)
 	return lipgloss.JoinVertical(lipgloss.Left, strip, panel)
 }
