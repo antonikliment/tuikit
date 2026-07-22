@@ -5,17 +5,30 @@ chrome you rebuild in every terminal app — a numbered page wrapper with
 navigation, chip tabs, and bordered panels — decoupled from any one app and
 driven by a swappable theme.
 
-## Screenshots
+## Demos
 
-From the demo (`go run ./examples/demo`):
+From `go run ./examples/demo` (and `./examples/themed` for the last one):
 
-| Panels — chip sub-tabs + focused panel | Search — live filter, page-nav suppressed |
+| Chip sub-tabs (`Tab` cycles) | Scrolling viewport |
+| --- | --- |
+| ![Panels](docs/gifs/panels.gif) | ![Reader](docs/gifs/reader.gif) |
+
+| Live search filter | Live theme switching (`t`) |
+| --- | --- |
+| ![Search](docs/gifs/search.gif) | ![Theme switch](docs/gifs/theme.gif) |
+
+<details>
+<summary>Static screenshots</summary>
+
+| Panels | Search |
 | --- | --- |
 | ![Panels page](docs/screenshots/1-panels.png) | ![Search page](docs/screenshots/4-search.png) |
 
-| Reader — scrolling viewport | About — layout helpers |
+| Reader | About |
 | --- | --- |
 | ![Reader page](docs/screenshots/2-reader.png) | ![About page](docs/screenshots/3-about.png) |
+
+</details>
 
 ## Components
 
@@ -59,8 +72,13 @@ tea.NewProgram(frame).Run()
 ## Demo
 
 ```sh
-go run ./examples/demo
+go run ./examples/demo    # pages, sub-tabs, scrolling reader, live search
+go run ./examples/themed  # live theme switching — press t to cycle palettes
 ```
 
 Number keys switch pages; on the Panels page `Tab` switches sub-panels; on the
 Search page `/` focuses the field (and digits then type instead of navigating).
+
+## License
+
+[MIT](LICENSE)

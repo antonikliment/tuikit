@@ -222,6 +222,34 @@ frame := tuikit.New(
 )
 ```
 
+## Live theme switching (global keys)
+
+`WithGlobalKeys` handles app-wide keys before the active page (theme toggle,
+help, …). `SetTheme` re-themes the Frame's chrome; pages follow by reading a
+shared `*Theme` the app swaps. See [`examples/themed`](../examples/themed).
+
+```go
+themes := []tuikit.Theme{tuikit.DefaultTheme(), oceanTheme(), sunsetTheme()}
+idx := 0
+shared := themes[idx] // pages hold &shared and read *ptr in View
+
+frame := tuikit.New(
+	tuikit.WithTheme(shared),
+	tuikit.WithPages(newPage(&shared)),
+	tuikit.WithGlobalKeys(func(msg tea.KeyPressMsg) (tea.Cmd, bool) {
+		if msg.String() != "t" {
+			return nil, false // not handled — falls through to the page
+		}
+		idx = (idx + 1) % len(themes)
+		shared = themes[idx]              // pages re-read this
+		return tuikit.SetTheme(shared), true // re-theme the Frame chrome
+	}),
+)
+```
+
+Global keys are skipped while the active page is capturing input, so a theme
+hotkey never fires mid-typing.
+
 ## Layout helpers
 
 ```go
