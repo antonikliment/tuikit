@@ -33,8 +33,11 @@
 //   - [SearchView] — a searchable viewport with follow-to-bottom behavior.
 //   - [Theme.ActionRow] — a labelled row of selectable actions.
 //   - [Help] and [HelpLine] — bright full and one-line keyboard help.
-//   - [Theme.StatusTitle], [Theme.Rule], [Field], [VerticalSlice], [Flow] —
-//     layout helpers.
+//   - [Meter] — a fixed-width resource gauge over bubbles/progress.
+//   - [Status] — a press-again-to-confirm flow with a result message.
+//   - [Theme.StatusTitle], [Theme.Rule], [Theme.EmptyPanel], [Field],
+//     [VerticalSlice], [Flow], [AdaptiveWidth], [TruncMiddle], [FormatBytes] —
+//     layout and text helpers.
 //
 // See the docs/examples.md file for copy-paste snippets, and examples/demo for
 // a runnable showcase.

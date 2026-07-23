@@ -11,6 +11,8 @@ Copy-paste snippets for each piece of the kit. A full runnable program lives in
 - [A scrolling page (viewport)](#a-scrolling-page-viewport)
 - [Searchable, following text (SearchView)](#searchable-following-text-searchview)
 - [Action rows](#action-rows)
+- [Resource meters](#resource-meters)
+- [Confirm + status messages (Status)](#confirm--status-messages-status)
 - [Help](#help)
 - [Search that suppresses page nav (InputCapturer)](#search-that-suppresses-page-nav-inputcapturer)
 - [Footer status](#footer-status)
@@ -217,6 +219,65 @@ row := theme.ActionRow(theme.Cyan, selected, labels, focused)
 When focused, the selected action is bracketed and highlighted. When unfocused,
 the whole row is muted.
 
+## Resource meters
+
+`Meter` is a fixed-width bar (filled/empty, no percentage label) over
+`bubbles/progress`. Build one per dial and reuse it; `View` clamps to 0–100.
+
+```go
+cpu := tuikit.NewMeter(20, theme.Green)
+ram := tuikit.NewMeter(20, theme.Yellow)
+
+row := fmt.Sprintf("CPU %s %3d%%", cpu.View(37), 37) // CPU ███████░░░░░░░░░░░░░  37%
+_ = ram.View(120)                                    // clamped to 100%
+```
+
+## Confirm + status messages (Status)
+
+`Status` bundles the "press again to confirm" flow with the success/error line
+it leaves behind — the destructive-action pattern (delete, cleanup) every list
+UI grows. `Confirm` arms a target on the first press and fires on the second;
+`SetResult` records the outcome; `AppendRows` renders it in the theme's colors.
+
+```go
+type page struct {
+	theme  tuikit.Theme
+	status tuikit.Status
+}
+
+func (p *page) Update(msg tea.Msg) tea.Cmd {
+	k, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return nil
+	}
+	switch k.String() {
+	case "d", "y": // "d" arms, a second "d"/"y" confirms
+		return p.status.Confirm(p.selectedPath(), k.String() == "y", func() tea.Cmd {
+			return deleteCmd(p.selectedPath()) // fired only on confirm
+		})
+	case "up", "down":
+		p.status.Clear() // moving the cursor drops the prompt and any message
+	case "esc":
+		p.status.Disarm() // cancel the prompt, keep the last message
+	}
+	return nil
+}
+
+// When the delete command returns, record the outcome:
+func (p *page) onDeleted(err error) { p.status.SetResult(err, "deleted") }
+
+func (p *page) View(width, height int) string {
+	rows := []string{p.table.View()}
+	if pending := p.status.Pending(); pending != "" {
+		rows = append(rows, p.theme.Accent(p.theme.Yellow).
+			Render("Delete "+pending+"? press d/y to confirm, esc to cancel"))
+	} else {
+		rows = p.status.AppendRows(p.theme, rows) // green success / yellow error
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+```
+
 ## Help
 
 `HelpLine` renders the common one-line form. `Help` returns the underlying
@@ -347,4 +408,9 @@ tuikit.Field("Model", "gemma.gguf")                      // "Model:    gemma.ggu
 t.Rule(width)                                            // muted divider line
 tuikit.VerticalSlice(content, 0, height)                 // hard-clip to height lines
 tuikit.Flow(width, 2, blocks)                            // wrap blocks left-to-right
+
+tuikit.TruncMiddle("/very/long/path/model.gguf", 18)     // "/very/lo…del.gguf"
+tuikit.FormatBytes(4_812_390_400)                        // "4.5 GiB"
+tuikit.AdaptiveWidth(total, gap, 28, 48)                 // responsive column width
+t.EmptyPanel(t.Cyan, width, height, "Nothing selected")  // muted placeholder panel
 ```

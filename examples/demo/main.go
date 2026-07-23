@@ -20,9 +20,9 @@ import (
 func main() {
 	frame := tuikit.New(
 		tuikit.WithBrand("tuikit", "reusable TUI frame kit"),
-		tuikit.WithPages(newPanelsPage(), newReaderPage(), newAboutPage(), newSearchPage()),
+		tuikit.WithPages(newPanelsPage(), newReaderPage(), newAboutPage(), newSearchPage(), newWidgetsPage()),
 		tuikit.WithStatus(func() (string, tuikit.Level) {
-			return "press 1-4 to switch pages", tuikit.LevelInfo
+			return "press 1-5 to switch pages", tuikit.LevelInfo
 		}),
 	)
 	if _, err := tea.NewProgram(frame).Run(); err != nil {
@@ -192,6 +192,69 @@ var searchItems = []string{
 	"nectarine", "orange", "papaya", "passionfruit", "peach", "pear",
 	"persimmon", "pineapple", "plum", "pomegranate", "raspberry",
 	"strawberry", "tangerine", "watermelon",
+}
+
+// --- Widgets page: Meter, Status (press-again-to-confirm), and text helpers ---
+
+type widgetsPage struct {
+	theme  tuikit.Theme
+	cpu    tuikit.Meter
+	ram    tuikit.Meter
+	disk   tuikit.Meter
+	status tuikit.Status // delete confirmation for the model below
+}
+
+func newWidgetsPage() *widgetsPage {
+	t := tuikit.DefaultTheme()
+	return &widgetsPage{
+		theme: t,
+		cpu:   tuikit.NewMeter(20, t.Green),
+		ram:   tuikit.NewMeter(20, t.Yellow),
+		disk:  tuikit.NewMeter(20, t.Red),
+	}
+}
+
+func (p *widgetsPage) Title() string { return "Widgets" }
+
+func (p *widgetsPage) Update(msg tea.Msg) tea.Cmd {
+	k, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return nil
+	}
+	switch k.String() {
+	case "d", "y": // arm on first press, "delete" on the second
+		p.status.Confirm("model.gguf", k.String() == "y", func() tea.Cmd {
+			p.status.SetResult(nil, "deleted model.gguf")
+			return nil
+		})
+	case "esc":
+		p.status.Disarm()
+	}
+	return nil
+}
+
+func (p *widgetsPage) View(width, height int) string {
+	t := p.theme
+	const longPath = "/home/user/.cache/huggingface/models/meta-llama/Llama-3-8B/model.gguf"
+
+	rows := []string{
+		t.StatusTitle("Widgets", "meter · status · text", t.Cyan, t.Green, width),
+		"CPU  " + p.cpu.View(37) + "  37%",
+		"RAM  " + p.ram.View(68) + "  68%",
+		"Disk " + p.disk.View(91) + "  91%",
+		t.Rule(width),
+		tuikit.Field("Size", tuikit.FormatBytes(4_812_390_400)),
+		tuikit.Field("Path", tuikit.TruncMiddle(longPath, max(10, width-14))),
+		t.Rule(width),
+	}
+	if pending := p.status.Pending(); pending != "" {
+		rows = append(rows, t.Accent(t.Yellow).Render("Delete "+pending+"? press d/y to confirm, esc to cancel"))
+	} else {
+		rows = append(rows, t.MutedStyle().Render("press d to delete model.gguf (asks again to confirm)"))
+		rows = p.status.AppendRows(t, rows)
+	}
+	return t.PanelStyle(t.Cyan, false).Width(width).Height(max(3, height-2)).
+		Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
 }
 
 var loremIpsum = strings.TrimSpace(strings.Repeat(`Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
