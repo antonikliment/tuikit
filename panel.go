@@ -16,6 +16,12 @@ func (t Theme) PanelStyle(accent color.Color, focused bool) lipgloss.Style {
 	return style
 }
 
+// EmptyPanel renders muted placeholder text inside an unfocused panel of the
+// given accent and size — the "nothing selected" state for a detail pane.
+func (t Theme) EmptyPanel(accent color.Color, width, height int, msg string) string {
+	return t.PanelStyle(accent, false).Width(width).Height(height).Render(t.MutedStyle().Render(msg))
+}
+
 // Panel is a convenience wrapper around PanelStyle with size baked in. Zero
 // Width/Height means "fit content".
 type Panel struct {
