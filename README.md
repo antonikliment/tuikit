@@ -28,6 +28,10 @@ From `go run ./examples/demo` (and `./examples/themed` for the last one):
 | --- | --- |
 | ![Reader page](docs/screenshots/2-reader.png) | ![About page](docs/screenshots/3-about.png) |
 
+| Widgets (Meter · Status · text helpers) | |
+| --- | --- |
+| ![Widgets page](docs/screenshots/5-widgets.png) | |
+
 </details>
 
 ## Components
@@ -63,7 +67,15 @@ From `go run ./examples/demo` (and `./examples/themed` for the last one):
 - **`Help`** / **`HelpLine`** — a `bubbles/help` model with brighter key and
   description colors than the dim bubbles default, plus a one-line short-help
   renderer.
-- **Layout helpers** — `StatusTitle`, `Field`, `Rule`, `VerticalSlice`, `Flow`.
+- **`Meter`** — a fixed-width horizontal gauge (filled/empty bar, no percentage
+  label) over `bubbles/progress`, clamped to 0–100. The CPU/RAM/disk dial every
+  dashboard needs.
+- **`Status`** — the "press again to confirm" destructive-action flow bundled
+  with the success/error message it leaves behind: `Confirm` arms then fires,
+  `SetResult` records the outcome, `AppendRows` renders it in the theme's colors.
+- **Layout & text helpers** — `StatusTitle`, `Field`, `Rule`, `VerticalSlice`,
+  `Flow`, `AdaptiveWidth` (responsive column width), `TruncMiddle` (rune-aware
+  middle-ellipsis), `FormatBytes` (IEC sizes), and `EmptyPanel` (placeholder).
 
 ## Usage
 
@@ -84,7 +96,7 @@ tea.NewProgram(frame).Run()
 ## Demo
 
 ```sh
-go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help
+go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Meter/Status
 go run ./examples/themed  # live theme switching — press t to cycle palettes
 ```
 

@@ -36,6 +36,14 @@ func VerticalSlice(content string, offset, height int) string {
 	return strings.Join(lines[offset:offset+height], "\n")
 }
 
+// AdaptiveWidth computes a responsive column width: it fits as many columns of
+// at least min width (separated by gap) as total allows, then divides the space
+// evenly, clamping each column to [min, max].
+func AdaptiveWidth(total, gap, minimum, maximum int) int {
+	columns := max(1, (total+gap)/(minimum+gap))
+	return min(max((total-(columns-1)*gap)/columns, minimum), maximum)
+}
+
 // Flow lays blocks out left-to-right, wrapping to a new row when the next block
 // would overflow width, separated by gap spaces.
 func Flow(width, gap int, blocks []string) string {
