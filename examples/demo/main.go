@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -129,81 +129,60 @@ func (p *aboutPage) View(width, height int) string {
 		Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
 }
 
-// --- Search page: demonstrates InputCapturer (number keys type, not navigate) ---
+// --- Search page: SearchView + ActionRow + HelpLine ---
 
 type searchPage struct {
-	theme tuikit.Theme
-	input textinput.Model
-	items []string
+	theme    tuikit.Theme
+	search   tuikit.SearchView
+	actions  []string
+	selected int
 }
 
 func newSearchPage() *searchPage {
-	in := textinput.New()
-	in.Placeholder = "press / to focus, then type to filter; Esc to blur"
-	return &searchPage{theme: tuikit.DefaultTheme(), input: in, items: searchItems}
-}
-
-func (p *searchPage) filtered() []string {
-	query := strings.ToLower(strings.TrimSpace(p.input.Value()))
-	if query == "" {
-		return p.items
+	search := tuikit.NewSearchView()
+	search.SetLines(searchItems)
+	return &searchPage{
+		theme:   tuikit.DefaultTheme(),
+		search:  search,
+		actions: []string{"Open", "Copy", "Delete"},
 	}
-	out := make([]string, 0, len(p.items))
-	for _, item := range p.items {
-		if strings.Contains(strings.ToLower(item), query) {
-			out = append(out, item)
-		}
-	}
-	return out
 }
 
 func (p *searchPage) Title() string { return "Search" }
 
 // CapturingInput makes the Frame hand number keys to this page while the field
 // is focused, instead of switching pages.
-func (p *searchPage) CapturingInput() bool { return p.input.Focused() }
+func (p *searchPage) CapturingInput() bool { return p.search.Searching() }
 
 func (p *searchPage) Update(msg tea.Msg) tea.Cmd {
-	k, ok := msg.(tea.KeyPressMsg)
-	if !ok {
-		return nil
-	}
-	if p.input.Focused() {
+	if k, ok := msg.(tea.KeyPressMsg); ok && !p.search.Searching() {
 		switch k.String() {
-		case "enter", "esc":
-			p.input.Blur()
-			return nil
-		default:
-			var cmd tea.Cmd
-			p.input, cmd = p.input.Update(msg)
-			return cmd
+		case "left":
+			p.selected = (p.selected + len(p.actions) - 1) % len(p.actions)
+		case "right":
+			p.selected = (p.selected + 1) % len(p.actions)
 		}
 	}
-	if k.String() == "/" {
-		return p.input.Focus()
-	}
+	p.search.Update(msg)
 	return nil
 }
 
 func (p *searchPage) View(width, height int) string {
 	t := p.theme
-	field := t.PanelStyle(t.Cyan, p.input.Focused()).Width(width).Render(p.input.View())
-
-	results := p.filtered()
-	lines := results
-	if len(results) == 0 {
-		lines = []string{t.MutedStyle().Render("no matches")}
-	}
-	bodyH := max(3, height-5) // input panel (3) + hint (1) + spacing
-	body := tuikit.VerticalSlice(strings.Join(lines, "\n"), 0, max(1, bodyH-2))
-	panel := t.PanelStyle(t.Green, false).Width(width).Height(bodyH).Render(body)
-
-	hint := t.MutedStyle().Render(fmt.Sprintf(
-		"%d / %d match  •  / focus  •  Esc blur  •  digits type while focused",
-		len(results), len(p.items),
-	))
-	return lipgloss.JoinVertical(lipgloss.Left, field, panel, hint)
+	bodyH := max(3, height-5) // action row + panel + help line
+	panel := t.PanelStyle(t.Green, p.search.Searching()).Width(width).Height(bodyH).
+		Render(p.search.View(max(1, width-4), max(1, bodyH-2)))
+	search := tuikit.Field("Search", p.search.InputView())
+	actions := t.ActionRow(t.Cyan, p.selected, p.actions, !p.search.Searching())
+	help := tuikit.HelpLine(searchKey, moveKey, clearKey)
+	return lipgloss.JoinVertical(lipgloss.Left, search, panel, actions, help)
 }
+
+var (
+	searchKey = key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "Search"))
+	moveKey   = key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "Action"))
+	clearKey  = key.NewBinding(key.WithKeys("esc"), key.WithHelp("Esc", "Clear"))
+)
 
 var searchItems = []string{
 	"apple", "apricot", "avocado", "banana", "blackberry", "blueberry",

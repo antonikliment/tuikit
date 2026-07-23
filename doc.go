@@ -30,6 +30,9 @@
 //     the active tab opens into the panel with no dividing line.
 //   - [Theme.TabStrip] — just the row of active/inactive tab chips.
 //   - [Theme.PanelStyle] and [Panel] — bordered panels with a focused state.
+//   - [SearchView] — a searchable viewport with follow-to-bottom behavior.
+//   - [Theme.ActionRow] — a labelled row of selectable actions.
+//   - [Help] and [HelpLine] — bright full and one-line keyboard help.
 //   - [Theme.StatusTitle], [Theme.Rule], [Field], [VerticalSlice], [Flow] —
 //     layout helpers.
 //

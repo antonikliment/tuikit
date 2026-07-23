@@ -13,7 +13,7 @@ From `go run ./examples/demo` (and `./examples/themed` for the last one):
 | --- | --- |
 | ![Panels](docs/gifs/panels.gif) | ![Reader](docs/gifs/reader.gif) |
 
-| Live search filter | Live theme switching (`t`) |
+| SearchView, ActionRow, and Help | Live theme switching (`t`) |
 | --- | --- |
 | ![Search](docs/gifs/search.gif) | ![Theme switch](docs/gifs/theme.gif) |
 
@@ -83,7 +83,7 @@ tea.NewProgram(frame).Run()
 ## Demo
 
 ```sh
-go run ./examples/demo    # pages, sub-tabs, scrolling reader, live search
+go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help
 go run ./examples/themed  # live theme switching — press t to cycle palettes
 ```
 
