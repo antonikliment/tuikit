@@ -51,6 +51,12 @@ From `go run ./examples/demo` (and `./examples/themed` for the last one):
 - **`TabStrip`** — a row of active/inactive chip tabs for sub-navigation within
   a page.
 - **`Panel`** / **`PanelStyle`** — bordered panels with a focused state.
+- **`ActionRow`** — a labelled row of selectable actions (`Actions:  Start
+  [Stop]  Restart`); the selected action is bracketed and highlighted when the
+  row is focused, muted otherwise.
+- **`Help`** / **`HelpLine`** — a `bubbles/help` model with brighter key and
+  description colors than the dim bubbles default, plus a one-line short-help
+  renderer.
 - **Layout helpers** — `StatusTitle`, `Field`, `Rule`, `VerticalSlice`, `Flow`.
 
 ## Usage
