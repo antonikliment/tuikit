@@ -5,9 +5,13 @@ Copy-paste snippets for each piece of the kit. A full runnable program lives in
 
 - [Minimal app](#minimal-app)
 - [Writing a page](#writing-a-page)
+- [Tabs joined to a panel (TabbedPanel)](#tabs-joined-to-a-panel-tabbedpanel)
 - [Sub-tabs with TabStrip](#sub-tabs-with-tabstrip)
 - [Panels](#panels)
 - [A scrolling page (viewport)](#a-scrolling-page-viewport)
+- [Searchable, following text (SearchView)](#searchable-following-text-searchview)
+- [Action rows](#action-rows)
+- [Help](#help)
 - [Search that suppresses page nav (InputCapturer)](#search-that-suppresses-page-nav-inputcapturer)
 - [Footer status](#footer-status)
 - [Custom theme](#custom-theme)
@@ -169,6 +173,61 @@ func (p *readerPage) View(width, height int) string {
 		Width(width).Height(height - 2).Render(p.vp.View())
 	return lipgloss.JoinVertical(lipgloss.Left, strip, panel)
 }
+```
+
+## Searchable, following text (SearchView)
+
+`SearchView` combines a viewport, case-insensitive substring filtering, and
+follow-to-bottom behavior. Feed it the latest lines whenever they change; `/`
+opens its search input, Enter/Esc closes it, and Esc once closed clears the
+query.
+
+```go
+type logsPage struct {
+	search tuikit.SearchView
+	lines  []string
+}
+
+func newLogsPage() *logsPage {
+	return &logsPage{search: tuikit.NewSearchView()}
+}
+
+func (p *logsPage) CapturingInput() bool { return p.search.Searching() }
+
+func (p *logsPage) Update(msg tea.Msg) tea.Cmd {
+	p.search.Update(msg)
+	return nil
+}
+
+func (p *logsPage) View(width, height int) string {
+	p.search.SetLines(p.lines)
+	pane := p.search.View(width, height-1)
+	prompt := tuikit.Field("Search", p.search.InputView())
+	return lipgloss.JoinVertical(lipgloss.Left, pane, prompt)
+}
+```
+
+## Action rows
+
+```go
+labels := []string{"Start", "Stop", "Restart"}
+row := theme.ActionRow(theme.Cyan, selected, labels, focused)
+```
+
+When focused, the selected action is bracketed and highlighted. When unfocused,
+the whole row is muted.
+
+## Help
+
+`HelpLine` renders the common one-line form. `Help` returns the underlying
+`bubbles/help` model when you need its full multi-column layout.
+
+```go
+search := key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "Search"))
+move := key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "Action"))
+
+line := tuikit.HelpLine(search, move)
+full := tuikit.Help()
 ```
 
 ## Search that suppresses page nav (InputCapturer)
