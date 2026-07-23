@@ -29,6 +29,28 @@ func TestSearchViewFiltersBySubstring(t *testing.T) {
 	}
 }
 
+func TestSearchViewMatchesVisibleTextNotAnsiCodes(t *testing.T) {
+	// A green "ERROR" line: the SGR code "38;5;10" is part of the raw string but
+	// not the visible text.
+	styled := "\x1b[38;5;10mERROR\x1b[0m server started"
+	s := NewSearchView()
+	s.SetLines([]string{styled, "info idle"})
+
+	// Query on visible text matches, and the returned line keeps its styling.
+	typeQuery(&s, "error")
+	if got := s.Filtered(); !reflect.DeepEqual(got, []string{styled}) {
+		t.Fatalf("Filtered() = %q, want the styled ERROR line", got)
+	}
+
+	// A query that only appears inside the ANSI escape code must NOT match.
+	s = NewSearchView()
+	s.SetLines([]string{styled})
+	typeQuery(&s, "38;5")
+	if got := s.Filtered(); len(got) != 0 {
+		t.Fatalf("Filtered() = %q, want no match on ANSI escape content", got)
+	}
+}
+
 func TestSearchViewEmptyQueryReturnsAllLines(t *testing.T) {
 	s := NewSearchView()
 	lines := []string{"one", "two", "three"}
