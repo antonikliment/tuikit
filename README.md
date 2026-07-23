@@ -51,6 +51,11 @@ From `go run ./examples/demo` (and `./examples/themed` for the last one):
 - **`TabStrip`** — a row of active/inactive chip tabs for sub-navigation within
   a page.
 - **`Panel`** / **`PanelStyle`** — bordered panels with a focused state.
+- **`SearchView`** — a scrollable text pane with an incremental substring
+  filter and follow-to-bottom behavior: feed it lines, it renders the matching
+  subset, stays pinned to the bottom as new lines arrive (until you scroll up),
+  and toggles a search input on `/`. The log/reader viewport every terminal app
+  rebuilds by hand.
 - **`ActionRow`** — a labelled row of selectable actions (`Actions:  Start
   [Stop]  Restart`); the selected action is bracketed and highlighted when the
   row is focused, muted otherwise.
