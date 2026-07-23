@@ -6,6 +6,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // SearchView is a scrollable text pane with an incremental substring filter and
@@ -45,7 +46,10 @@ func (s *SearchView) Query() string { return s.input.Value() }
 func (s *SearchView) InputView() string { return s.input.View() }
 
 // Filtered returns the lines matching the current query (case-insensitive
-// substring); the full slice when the query is empty.
+// substring); the full slice when the query is empty. Matching is done against
+// each line's visible text — ANSI styling is stripped first — so a query never
+// matches the escape codes in a colored line, while the returned lines keep
+// their styling for display.
 func (s *SearchView) Filtered() []string {
 	if s.input.Value() == "" {
 		return s.lines
@@ -53,7 +57,7 @@ func (s *SearchView) Filtered() []string {
 	needle := strings.ToLower(s.input.Value())
 	out := make([]string, 0, len(s.lines))
 	for _, line := range s.lines {
-		if strings.Contains(strings.ToLower(line), needle) {
+		if strings.Contains(strings.ToLower(ansi.Strip(line)), needle) {
 			out = append(out, line)
 		}
 	}
