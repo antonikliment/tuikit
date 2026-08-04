@@ -17,9 +17,10 @@ From `go run ./examples/demo` (and `./examples/themed` for the last one):
 | --- | --- |
 | ![Search](docs/gifs/search.gif) | ![Theme switch](docs/gifs/theme.gif) |
 
-Aligned columns and the formatters, with a simulated transfer driving
-`Meter` and `TransferredBytes` — note the coloured `STATE` cells cost the
-columns beside them nothing:
+`Table`, `Pairs` and the formatters, with a simulated transfer driving `Meter`
+and `TransferredBytes`. The `STATE` words are graded by `StatusWord` — green,
+amber, red — and cost the columns beside them nothing, because widths are
+measured by display width rather than by string length:
 
 ![Table](docs/gifs/table.gif)
 
@@ -34,7 +35,7 @@ columns beside them nothing:
 | --- | --- |
 | ![Reader page](docs/screenshots/2-reader.png) | ![About page](docs/screenshots/3-about.png) |
 
-| Widgets (Meter · Status · text helpers) | Table (Columns · formatters) |
+| Widgets (Meter · Status · text helpers) | Table (Table · Pairs · StatusWord) |
 | --- | --- |
 | ![Widgets page](docs/screenshots/5-widgets.png) | ![Table page](docs/screenshots/6-table.png) |
 
@@ -114,6 +115,7 @@ tea.NewProgram(frame).Run()
 ## Docs
 
 - [docs/examples.md](docs/examples.md) — copy-paste snippets for every component.
+- [scripts/record.py](scripts/record.py) — regenerates the gif and screenshot above.
 - Package overview / API reference: `go doc github.com/antonikliment/tuikit`.
 
 ## Demo
