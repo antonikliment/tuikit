@@ -35,9 +35,12 @@
 //   - [Help] and [HelpLine] — bright full and one-line keyboard help.
 //   - [Meter] — a fixed-width resource gauge over bubbles/progress.
 //   - [Status] — a press-again-to-confirm flow with a result message.
+//   - [Columns], [JoinCells], [Pad], [Widest] — display-width column layout for
+//     a table of strings, measured so styled cells still align.
 //   - [Theme.StatusTitle], [Theme.Rule], [Theme.EmptyPanel], [Field],
-//     [VerticalSlice], [Flow], [AdaptiveWidth], [TruncMiddle], [FormatBytes] —
-//     layout and text helpers.
+//     [VerticalSlice], [Flow], [AdaptiveWidth], [Indent], [IndentLines],
+//     [TruncMiddle], [FormatBytes], [TransferredBytes], [CoarseDuration],
+//     [Age] — layout and text helpers.
 //
 // See the docs/examples.md file for copy-paste snippets, and examples/demo for
 // a runnable showcase.

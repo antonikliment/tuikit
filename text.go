@@ -1,6 +1,9 @@
 package tuikit
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // TruncMiddle keeps a string on a single line by eliding its middle with an
 // ellipsis once it exceeds width runes, so long paths never orphan onto a
@@ -30,4 +33,58 @@ func FormatBytes(size int64) string {
 		}
 	}
 	return fmt.Sprintf("%.1f PiB", value/unit)
+}
+
+// TransferredBytes renders transfer progress as "4.1 GiB / 6.6 GiB" using
+// [FormatBytes].
+//
+// A total of zero or less means "not yet known" — a multi-file download does
+// not learn its size until every manifest is fetched — and renders as the
+// received count alone. That is deliberate: "4.1 GiB / 0 B" reads as a bug, and
+// a caller with no total should show a byte counter rather than a progress bar
+// pinned at zero.
+func TransferredBytes(received, total int64) string {
+	if total <= 0 {
+		return FormatBytes(received)
+	}
+	return FormatBytes(received) + " / " + FormatBytes(total)
+}
+
+// CoarseDuration rounds d to roughly three significant figures, scaling the
+// unit with the magnitude: 272.914939ms becomes 272ms while 1.234µs keeps its
+// precision.
+//
+// Nanosecond precision on a wall-clock duration is noise in a column an
+// operator is scanning for the one slow entry — 272.914939ms and 272ms lead to
+// the same conclusion, and only one of them lines up. Durations under a
+// microsecond are returned unchanged, as is the zero value. Negative durations
+// round by magnitude and keep their sign.
+func CoarseDuration(d time.Duration) time.Duration {
+	for _, unit := range []time.Duration{time.Second, time.Millisecond, time.Microsecond} {
+		if d.Abs() >= unit {
+			return d.Round(unit / 100)
+		}
+	}
+	return d
+}
+
+// AgeCutoff is how old an instant may be before [Age] stops rendering it as an
+// elapsed time. Past a day "27h14m ago" is harder to place than the timestamp
+// it came from.
+const AgeCutoff = 24 * time.Hour
+
+// Age renders at as how long before now it was: "3h23m0s ago". An operator
+// reading a log or an event list wants "how long ago", and computing that from
+// an RFC 3339 string in their head is the work this saves.
+//
+// Outside the window — an instant in the future, or older than [AgeCutoff] —
+// the elapsed form stops being the useful one and the absolute local time comes
+// back as RFC 3339. now is a parameter rather than a call to [time.Now] so the
+// result is a pure function of its inputs and a test need not sleep.
+func Age(at, now time.Time) string {
+	since := now.Sub(at).Round(time.Second)
+	if since < 0 || since > AgeCutoff {
+		return at.Local().Format(time.RFC3339)
+	}
+	return since.String() + " ago"
 }

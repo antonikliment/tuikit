@@ -73,9 +73,16 @@ From `go run ./examples/demo` (and `./examples/themed` for the last one):
 - **`Status`** — the "press again to confirm" destructive-action flow bundled
   with the success/error message it leaves behind: `Confirm` arms then fires,
   `SetResult` records the outcome, `AppendRows` renders it in the theme's colors.
+- **Column layout** — `Columns` measures a `[][]string` table by display width,
+  `JoinCells` lays one row out against those widths, and `Pad`/`Widest` do the
+  same for a key/value column. All four measure with `ansi.StringWidth`, so a
+  styled cell aligns like its plain equivalent instead of padding by the length
+  of its escape sequence.
 - **Layout & text helpers** — `StatusTitle`, `Field`, `Rule`, `VerticalSlice`,
-  `Flow`, `AdaptiveWidth` (responsive column width), `TruncMiddle` (rune-aware
-  middle-ellipsis), `FormatBytes` (IEC sizes), and `EmptyPanel` (placeholder).
+  `Flow`, `AdaptiveWidth` (responsive column width), `Indent`/`IndentLines`,
+  `TruncMiddle` (rune-aware middle-ellipsis), `FormatBytes` (IEC sizes),
+  `TransferredBytes` ("4.1 GiB / 6.6 GiB"), `CoarseDuration` (three significant
+  figures), `Age` ("3m0s ago"), and `EmptyPanel` (placeholder).
 
 ## Usage
 
