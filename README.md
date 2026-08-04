@@ -79,12 +79,22 @@ columns beside them nothing:
 - **`Status`** — the "press again to confirm" destructive-action flow bundled
   with the success/error message it leaves behind: `Confirm` arms then fires,
   `SetResult` records the outcome, `AppendRows` renders it in the theme's colors.
-- **Column layout** — `Columns` measures a `[][]string` table by display width,
-  `JoinCells` lays one row out against those widths, and `Pad`/`Widest` do the
-  same for a key/value column. All four measure with `ansi.StringWidth`, so a
-  styled cell aligns like its plain equivalent instead of padding by the length
-  of its escape sequence.
-- **Layout & text helpers** — `StatusTitle`, `Field`, `Rule`, `VerticalSlice`,
+- **`Table`** / **`Pairs`** — a header and `[][]string` body in, an aligned
+  block out: widths measured over the header too, header upper-cased and muted.
+  `Pairs` is the one-dimensional case, for key/value data. Both are built on
+  `Columns`, `JoinCells`, `Pad` and `Widest`, which stay exported for layouts
+  they do not cover. All measure with `ansi.StringWidth`, so a styled cell
+  aligns like its plain equivalent instead of padding by the length of its
+  escape sequence.
+- **`Painter`** — `PainterFor(w)` decides once whether output may carry escapes
+  (`w` is a terminal, `NO_COLOR` unset) and returns `Paint` or `Plain`, so no
+  call site repeats that test — or gets it subtly different, which is how half a
+  command's output ends up coloured. `Plain` also keeps test assertions readable.
+- **`ClassifyStatus`** / **`StatusWord`** — grade a status word into a `Level`
+  and paint it: green for a healthy state, red for a failure, amber for anything
+  unfamiliar, so an operator only reads the words that are not green.
+- **Layout & text helpers** — `Titleize` (`running_profiles` → `Running
+  profiles`), `StatusTitle`, `Field`, `Rule`, `VerticalSlice`,
   `Flow`, `AdaptiveWidth` (responsive column width), `Indent`/`IndentLines`,
   `TruncMiddle` (rune-aware middle-ellipsis), `FormatBytes` (IEC sizes),
   `TransferredBytes` ("4.1 GiB / 6.6 GiB"), `CoarseDuration` (three significant
@@ -109,7 +119,7 @@ tea.NewProgram(frame).Run()
 ## Demo
 
 ```sh
-go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Meter/Status, Columns
+go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Meter/Status, Table/Pairs
 go run ./examples/themed  # live theme switching — press t to cycle palettes
 ```
 

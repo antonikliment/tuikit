@@ -425,32 +425,76 @@ tuikit.Indent("nested", 2)                            // "    nested"
 
 ## Aligned columns
 
-`Columns` measures a table by display width; `JoinCells` lays each row out
-against those widths. Pass the header row in with the body so a column never
-renders narrower than its own title.
+`Theme.Table` measures the header alongside the body, upper-cases the header and
+mutes it, and returns the whole block newline-terminated:
 
 ```go
-header := []string{"NAME", "STATE", "SIZE"}
 rows := [][]string{
-    {"gemma-2b", t.Accent(t.Green).Render("running"), tuikit.FormatBytes(2_684_354_560)},
-    {"llama-8b", "stopped", tuikit.FormatBytes(8_589_934_592)},
+    {"gemma-2b", t.StatusWord(tuikit.Paint, "running"), tuikit.FormatBytes(2_684_354_560)},
+    {"llama-8b", t.StatusWord(tuikit.Paint, "stopped"), tuikit.FormatBytes(8_589_934_592)},
 }
+fmt.Print(t.Table(tuikit.Paint, []string{"name", "state", "size"}, rows, 2))
+```
 
-widths := tuikit.Columns(append([][]string{header}, rows...))
-fmt.Println(t.MutedStyle().Render(tuikit.JoinCells(header, widths, 2)))
-for _, row := range rows {
-    fmt.Println(tuikit.JoinCells(row, widths, 2))
-}
+```
+NAME      STATE    SIZE
+gemma-2b  running  2.5 GiB
+llama-8b  stopped  8.0 GiB
 ```
 
 Widths are measured with `ansi.StringWidth`, so the styled `running` cell above
-occupies two screen columns rather than the length of its escape sequence — the
-column below it stays aligned. For key/value pairs rather than a table, `Widest`
-and `Pad` do the same job in one dimension:
+occupies seven screen columns rather than the length of its escape sequence —
+the column below it stays aligned. `Theme.Pairs` is the same job in one
+dimension, for key/value data rather than a table:
 
 ```go
-width := tuikit.Widest(keys)
-for _, k := range keys {
-    fmt.Println(t.MutedStyle().Render(tuikit.Pad(k, width)), values[k])
-}
+fmt.Print(t.Pairs(tuikit.Paint,
+    []string{"Backend", "Quantization", "Context"},
+    []string{"llama.cpp", "Q4_K_M", "8192"}, 2))
 ```
+
+```
+Backend       llama.cpp
+Quantization  Q4_K_M
+Context       8192
+```
+
+Both build on `Columns`, `JoinCells`, `Pad` and `Widest`, which stay exported
+for the layouts these two do not cover.
+
+## Painting only when a terminal is watching
+
+`PainterFor` decides once — is this a terminal, is `NO_COLOR` set — and hands
+back a function every call site uses without repeating the test:
+
+```go
+paint := tuikit.PainterFor(os.Stdout)      // Paint on a tty, Plain otherwise
+fmt.Println(paint(t.Accent(t.Red), "connection refused"))
+```
+
+`Plain` and `Paint` are the two ends, usable directly: `Plain` in tests, so
+assertions read against content rather than escape sequences, and `Paint` where
+the destination is already known to be a terminal. `IsTerminalWriter` and
+`ColorEnabled` answer the underlying questions separately, because they are
+different questions: `NO_COLOR` means "do not paint", not "switch to machine
+output".
+
+## Grading status words
+
+`ClassifyStatus` maps a status word to a `Level`, so nothing downstream keeps
+its own list of what "fine" looks like. `Theme.StatusWord` paints one in a
+single call:
+
+```go
+tuikit.ClassifyStatus("running")          // LevelSuccess
+tuikit.ClassifyStatus("download_failed")  // LevelError
+tuikit.ClassifyStatus("provisioning")     // LevelWarning — unfamiliar, so worth reading
+t.StatusWord(paint, "running")            // the word, in green
+t.LevelStyle(tuikit.LevelError)           // the style alone, for text you compose yourself
+```
+
+## Labels from identifiers
+
+`Titleize` turns a field or column name into a label — `running_profiles` and
+`runningProfiles` both become `Running profiles`. Sentence case, not Title Case,
+so a label does not read as a proper noun.

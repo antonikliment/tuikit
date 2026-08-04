@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"image/color"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -11,7 +11,7 @@ import (
 	"github.com/antonikliment/tuikit"
 )
 
-// --- Table page: Columns/JoinCells alignment, Pad/Widest, and the formatters ---
+// --- Table page: Table/Pairs alignment, StatusWord, and the formatters ---
 //
 // The point of the table below is that the STATE column is coloured and the
 // SIZE column is not, yet both line up: widths are measured with display width,
@@ -98,42 +98,29 @@ func (p *tablePage) View(width, height int) string {
 		Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
 }
 
-// table renders the aligned table. Note that nothing here tracks widths by
-// hand: Columns measures the header alongside the body, so a column is never
-// narrower than its own title.
+// table renders the aligned table. Nothing here tracks widths by hand: Table
+// measures the header alongside the body, so a column is never narrower than
+// its own title, and the STATE column is coloured while the SIZE column is not
+// yet both still line up.
+//
+// The state words are graded by StatusWord rather than by a switch this page
+// owns — "running" and "ready" are green, "failed" red, anything unfamiliar
+// amber, without the caller keeping its own list of what fine looks like.
 func (p *tablePage) table() []string {
 	t := p.theme
-	header := []string{"NAME", "STATE", "SIZE", "LOAD", "SEEN"}
 	now := time.Now()
-
 	body := make([][]string, 0, len(tableRows))
 	for _, r := range tableRows {
 		body = append(body, []string{
 			r.name,
-			t.Accent(stateColor(t, r.state)).Render(r.state),
+			t.StatusWord(tuikit.Paint, r.state),
 			tuikit.FormatBytes(r.size),
 			tuikit.CoarseDuration(r.took).String(),
 			tuikit.Age(now.Add(-r.age), now),
 		})
 	}
-
-	widths := tuikit.Columns(append([][]string{header}, body...))
-	lines := []string{t.MutedStyle().Render(tuikit.JoinCells(header, widths, tableGap))}
-	for _, row := range body {
-		lines = append(lines, tuikit.JoinCells(row, widths, tableGap))
-	}
-	return lines
-}
-
-func stateColor(t tuikit.Theme, state string) color.Color {
-	switch state {
-	case "running", "ready":
-		return t.Green
-	case "failed":
-		return t.Red
-	default:
-		return t.Muted
-	}
+	block := t.Table(tuikit.Paint, []string{"name", "state", "size", "load", "seen"}, body, tableGap)
+	return strings.Split(strings.TrimRight(block, "\n"), "\n")
 }
 
 // transfer shows TransferredBytes doing its two jobs: a known total renders as
@@ -162,20 +149,17 @@ func (p *tablePage) transfer() []string {
 	return lines
 }
 
-// pairs is the one-dimensional case: Widest and Pad line up a key column when
-// the data is key/value rather than a table.
+// pairs is the one-dimensional case: Pairs lines up a key column when the data
+// is key/value rather than a table. Titleize turns the raw identifiers into
+// labels, so "flash_attention" reads as "Flash attention".
 func (p *tablePage) pairs() []string {
 	t := p.theme
 	keys := []string{"backend", "quantization", "context", "flash_attention"}
-	values := map[string]string{
-		"backend": "llama.cpp", "quantization": "Q4_K_M",
-		"context": "8192", "flash_attention": t.Accent(t.Green).Render("enabled"),
+	values := []string{"llama.cpp", "Q4_K_M", "8192", t.StatusWord(tuikit.Paint, "enabled")}
+	for i, key := range keys {
+		keys[i] = tuikit.Titleize(key)
 	}
-	width := tuikit.Widest(keys)
-	lines := []string{t.MutedStyle().Render("Engine arguments")}
-	for _, key := range keys {
-		lines = append(lines,
-			tuikit.Indent(t.MutedStyle().Render(tuikit.Pad(key, width))+"  "+values[key], 1))
-	}
-	return lines
+	block := tuikit.IndentLines(t.Pairs(tuikit.Paint, keys, values, tableGap), 1)
+	return append([]string{t.MutedStyle().Render("Engine arguments")},
+		strings.Split(strings.TrimRight(block, "\n"), "\n")...)
 }
