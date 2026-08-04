@@ -35,6 +35,7 @@ const (
 	LevelInfo Level = iota
 	LevelSuccess
 	LevelWarning
+	LevelError
 )
 
 // StatusFunc supplies the footer status line. Return an empty string to show
@@ -218,11 +219,8 @@ func (f *Frame) footer(width int) string {
 		}
 	}
 	style := f.theme.SubtleStyle()
-	switch level {
-	case LevelWarning:
-		style = f.theme.Accent(f.theme.Yellow)
-	case LevelSuccess:
-		style = f.theme.Accent(f.theme.Green)
+	if level != LevelInfo {
+		style = f.theme.LevelStyle(level)
 	}
 	return lipgloss.NewStyle().Width(width).Render(style.Render("Status: " + text))
 }

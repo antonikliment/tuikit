@@ -54,3 +54,28 @@ func (t Theme) BrandStyle() lipgloss.Style {
 
 // Accent renders text in the given accent color.
 func (t Theme) Accent(c color.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }
+
+// LevelStyle is the color a [Level] is drawn in: green, yellow, red, and muted
+// for [LevelInfo]. Pairing it with [ClassifyStatus] turns a status word into a
+// styled one without the caller owning a palette.
+func (t Theme) LevelStyle(level Level) lipgloss.Style {
+	switch level {
+	case LevelSuccess:
+		return t.Accent(t.Green)
+	case LevelWarning:
+		return t.Accent(t.Yellow)
+	case LevelError:
+		return t.Accent(t.Red)
+	default:
+		return t.MutedStyle()
+	}
+}
+
+// StatusWord paints a status word by what [ClassifyStatus] makes of it: green
+// for a healthy state, red for a failure, yellow for anything unfamiliar.
+func (t Theme) StatusWord(paint Painter, word string) string {
+	if word == "" {
+		return word
+	}
+	return paint(t.LevelStyle(ClassifyStatus(word)), word)
+}

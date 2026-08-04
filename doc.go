@@ -35,12 +35,17 @@
 //   - [Help] and [HelpLine] — bright full and one-line keyboard help.
 //   - [Meter] — a fixed-width resource gauge over bubbles/progress.
 //   - [Status] — a press-again-to-confirm flow with a result message.
-//   - [Columns], [JoinCells], [Pad], [Widest] — display-width column layout for
-//     a table of strings, measured so styled cells still align.
+//   - [Theme.Table] and [Theme.Pairs] — an aligned block from a header and
+//     rows, or from key/value pairs, over the display-width primitives
+//     [Columns], [JoinCells], [Pad] and [Widest], so styled cells still align.
+//   - [Painter], [PainterFor], [Paint], [Plain] — paint only when the
+//     destination is a terminal and NO_COLOR is unset, decided once.
+//   - [ClassifyStatus] and [Theme.StatusWord] — grade a status word into a
+//     [Level] and paint it green, red or amber.
 //   - [Theme.StatusTitle], [Theme.Rule], [Theme.EmptyPanel], [Field],
 //     [VerticalSlice], [Flow], [AdaptiveWidth], [Indent], [IndentLines],
-//     [TruncMiddle], [FormatBytes], [TransferredBytes], [CoarseDuration],
-//     [Age] — layout and text helpers.
+//     [TruncMiddle], [Titleize], [FormatBytes], [TransferredBytes],
+//     [CoarseDuration], [Age] — layout and text helpers.
 //
 // See the docs/examples.md file for copy-paste snippets, and examples/demo for
 // a runnable showcase.
