@@ -2,7 +2,9 @@ package tuikit
 
 import (
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 )
 
 // TruncMiddle keeps a string on a single line by eliding its middle with an
@@ -87,4 +89,55 @@ func Age(at, now time.Time) string {
 		return at.Local().Format(time.RFC3339)
 	}
 	return since.String() + " ago"
+}
+
+// Titleize turns an identifier into a label: "running_profiles" and its camel
+// spelling "runningProfiles" both become "Running profiles". Sentence case, not
+// Title Case, so "Autostart profiles" does not read as a proper noun.
+func Titleize(name string) string {
+	var b strings.Builder
+	for i, r := range name {
+		switch {
+		case r == '_':
+			b.WriteRune(' ')
+		case unicode.IsUpper(r) && i > 0:
+			b.WriteRune(' ')
+			b.WriteRune(unicode.ToLower(r))
+		case i == 0:
+			b.WriteRune(unicode.ToUpper(r))
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// healthy names the status words that mean "nothing to look at here".
+// Everything unrecognized is a warning, so an operator scanning output only has
+// to read the words that are not green.
+var healthy = map[string]bool{
+	"ok": true, "running": true, "ready": true, "completed": true,
+	"installed": true, "active": true, "healthy": true, "done": true,
+	"enabled":   true,
+	"succeeded": true, "success": true, "passed": true,
+}
+
+// ClassifyStatus grades a status word so it can be colored without every caller
+// keeping its own list of what "fine" looks like. Matching is case-insensitive;
+// anything unrecognized is [LevelWarning], which is the safe default — an
+// unfamiliar state is one an operator should read.
+//
+// An empty string is [LevelInfo]: there is nothing to grade.
+func ClassifyStatus(word string) Level {
+	key := strings.ToLower(word)
+	switch {
+	case key == "":
+		return LevelInfo
+	case healthy[key]:
+		return LevelSuccess
+	case strings.Contains(key, "fail") || strings.Contains(key, "error"):
+		return LevelError
+	default:
+		return LevelWarning
+	}
 }
