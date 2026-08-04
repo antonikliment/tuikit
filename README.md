@@ -17,6 +17,12 @@ From `go run ./examples/demo` (and `./examples/themed` for the last one):
 | --- | --- |
 | ![Search](docs/gifs/search.gif) | ![Theme switch](docs/gifs/theme.gif) |
 
+Aligned columns and the formatters, with a simulated transfer driving
+`Meter` and `TransferredBytes` — note the coloured `STATE` cells cost the
+columns beside them nothing:
+
+![Table](docs/gifs/table.gif)
+
 <details>
 <summary>Static screenshots</summary>
 
@@ -28,9 +34,9 @@ From `go run ./examples/demo` (and `./examples/themed` for the last one):
 | --- | --- |
 | ![Reader page](docs/screenshots/2-reader.png) | ![About page](docs/screenshots/3-about.png) |
 
-| Widgets (Meter · Status · text helpers) | |
+| Widgets (Meter · Status · text helpers) | Table (Columns · formatters) |
 | --- | --- |
-| ![Widgets page](docs/screenshots/5-widgets.png) | |
+| ![Widgets page](docs/screenshots/5-widgets.png) | ![Table page](docs/screenshots/6-table.png) |
 
 </details>
 
@@ -73,9 +79,16 @@ From `go run ./examples/demo` (and `./examples/themed` for the last one):
 - **`Status`** — the "press again to confirm" destructive-action flow bundled
   with the success/error message it leaves behind: `Confirm` arms then fires,
   `SetResult` records the outcome, `AppendRows` renders it in the theme's colors.
+- **Column layout** — `Columns` measures a `[][]string` table by display width,
+  `JoinCells` lays one row out against those widths, and `Pad`/`Widest` do the
+  same for a key/value column. All four measure with `ansi.StringWidth`, so a
+  styled cell aligns like its plain equivalent instead of padding by the length
+  of its escape sequence.
 - **Layout & text helpers** — `StatusTitle`, `Field`, `Rule`, `VerticalSlice`,
-  `Flow`, `AdaptiveWidth` (responsive column width), `TruncMiddle` (rune-aware
-  middle-ellipsis), `FormatBytes` (IEC sizes), and `EmptyPanel` (placeholder).
+  `Flow`, `AdaptiveWidth` (responsive column width), `Indent`/`IndentLines`,
+  `TruncMiddle` (rune-aware middle-ellipsis), `FormatBytes` (IEC sizes),
+  `TransferredBytes` ("4.1 GiB / 6.6 GiB"), `CoarseDuration` (three significant
+  figures), `Age` ("3m0s ago"), and `EmptyPanel` (placeholder).
 
 ## Usage
 
@@ -96,12 +109,13 @@ tea.NewProgram(frame).Run()
 ## Demo
 
 ```sh
-go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Meter/Status
+go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Meter/Status, Columns
 go run ./examples/themed  # live theme switching — press t to cycle palettes
 ```
 
 Number keys switch pages; on the Panels page `Tab` switches sub-panels; on the
-Search page `/` focuses the field (and digits then type instead of navigating).
+Search page `/` focuses the field (and digits then type instead of navigating); on
+the Table page any key starts the simulated transfer.
 
 ## License
 

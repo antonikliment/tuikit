@@ -414,3 +414,43 @@ tuikit.FormatBytes(4_812_390_400)                        // "4.5 GiB"
 tuikit.AdaptiveWidth(total, gap, 28, 48)                 // responsive column width
 t.EmptyPanel(t.Cyan, width, height, "Nothing selected")  // muted placeholder panel
 ```
+
+```go
+tuikit.TransferredBytes(4_294_967_296, 8_589_934_592) // "4.0 GiB / 8.0 GiB"
+tuikit.TransferredBytes(512, 0)                       // "512 B" — total not yet known
+tuikit.CoarseDuration(272_914_939 * time.Nanosecond)  // 272.91ms, not 272.914939ms
+tuikit.Age(startedAt, time.Now())                     // "3h23m0s ago"
+tuikit.Indent("nested", 2)                            // "    nested"
+```
+
+## Aligned columns
+
+`Columns` measures a table by display width; `JoinCells` lays each row out
+against those widths. Pass the header row in with the body so a column never
+renders narrower than its own title.
+
+```go
+header := []string{"NAME", "STATE", "SIZE"}
+rows := [][]string{
+    {"gemma-2b", t.Accent(t.Green).Render("running"), tuikit.FormatBytes(2_684_354_560)},
+    {"llama-8b", "stopped", tuikit.FormatBytes(8_589_934_592)},
+}
+
+widths := tuikit.Columns(append([][]string{header}, rows...))
+fmt.Println(t.MutedStyle().Render(tuikit.JoinCells(header, widths, 2)))
+for _, row := range rows {
+    fmt.Println(tuikit.JoinCells(row, widths, 2))
+}
+```
+
+Widths are measured with `ansi.StringWidth`, so the styled `running` cell above
+occupies two screen columns rather than the length of its escape sequence — the
+column below it stays aligned. For key/value pairs rather than a table, `Widest`
+and `Pad` do the same job in one dimension:
+
+```go
+width := tuikit.Widest(keys)
+for _, k := range keys {
+    fmt.Println(t.MutedStyle().Render(tuikit.Pad(k, width)), values[k])
+}
+```
