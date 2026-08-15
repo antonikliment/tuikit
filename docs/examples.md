@@ -10,6 +10,7 @@ Copy-paste snippets for each piece of the kit. A full runnable program lives in
 - [Panels](#panels)
 - [A scrolling page (viewport)](#a-scrolling-page-viewport)
 - [Searchable, following text (SearchView)](#searchable-following-text-searchview)
+- [A modal popup (Overlay)](#a-modal-popup-overlay)
 - [Action rows](#action-rows)
 - [Resource meters](#resource-meters)
 - [Confirm + status messages (Status)](#confirm--status-messages-status)
@@ -208,6 +209,54 @@ func (p *logsPage) View(width, height int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, pane, prompt)
 }
 ```
+
+## A modal popup (Overlay)
+
+`Overlay` puts reference output — a help table, a usage report — in a box drawn
+*over* the page instead of splicing it into the content stream. Render your view
+as usual and hand it to the overlay last; `Render` returns a frame of exactly
+the size you gave it, so no other layout math changes.
+
+```go
+type page struct{ overlay tuikit.Overlay }
+
+func newPage() *page {
+	o := tuikit.NewOverlay(tuikit.DefaultTheme()) // centered
+	o.Help = []key.Binding{refreshKey}            // shown in the hint row
+	return &page{overlay: o}
+}
+
+func (p *page) Update(msg tea.Msg) tea.Cmd {
+	// Claim your own keys first: an open Overlay is modal and swallows the rest.
+	if k, ok := msg.(tea.KeyPressMsg); ok && key.Matches(k, helpKey) {
+		p.overlay.Open("help", helpTable())
+		return nil
+	}
+	p.overlay.Update(msg) // true = claimed (esc/q close, arrows scroll)
+	return nil
+}
+
+func (p *page) View(width, height int) string {
+	return p.overlay.Render(p.body(width, height), width, height)
+}
+```
+
+Pin it somewhere other than the middle with `Align`, nudging by whole cells if
+an edge needs clearing (a shift past the frame is clamped, never drawn
+off-screen):
+
+```go
+p.overlay.Align = tuikit.Alignment{
+	Horizontal: lipgloss.Right,
+	Vertical:   lipgloss.Bottom,
+	ShiftY:     -1, // one row up, clear of a footer
+}
+```
+
+While closed, `Update` claims nothing and `Render` returns the view untouched,
+so adopting one changes no existing behavior. Implement `CapturingInput` as
+`p.overlay.IsOpen()` to keep the Frame's number keys out of the way while it is
+up.
 
 ## Action rows
 

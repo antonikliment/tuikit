@@ -24,6 +24,12 @@ measured by display width rather than by string length:
 
 ![Table](docs/gifs/table.gif)
 
+`Overlay`, a modal popup composited over the page. `p` pins it to each of the
+nine anchors in turn and `hjkl` nudges it off one; the page underneath never
+reflows, and closing it leaves the page exactly as it was:
+
+![Overlay](docs/gifs/overlay.gif)
+
 <details>
 <summary>Static screenshots</summary>
 
@@ -38,6 +44,10 @@ measured by display width rather than by string length:
 | Widgets (Meter · Status · text helpers) | Table (Table · Pairs · StatusWord) |
 | --- | --- |
 | ![Widgets page](docs/screenshots/5-widgets.png) | ![Table page](docs/screenshots/6-table.png) |
+
+| Overlay (modal popup, pinned right) |
+| --- |
+| ![Overlay page](docs/screenshots/7-overlay.png) |
 
 </details>
 
@@ -68,6 +78,13 @@ measured by display width rather than by string length:
   and toggles a search input on `/`. Matching is against each line's visible
   text (ANSI styling is stripped first), so colored lines still search cleanly.
   The log/reader viewport every terminal app rebuilds by hand.
+- **`Overlay`** — a dismissable floating panel: a titled, bordered, scrollable
+  box drawn *over* the host's view rather than stacked above or below it, for
+  the reference output (a help table, a usage report) that otherwise has nowhere
+  to go but the main content stream. `Render` returns a frame of exactly the
+  size it was given, so adopting one changes no layout math; `Align` pins it to
+  any of nine anchors with a cell-wise nudge; `Help` adds host bindings to the
+  hint row, which is always drawn — a modal with no visible way out is a trap.
 - **`ActionRow`** — a labelled row of selectable actions (`Actions:  Start
   [Stop]  Restart`); the selected action is bracketed and highlighted when the
   row is focused, muted otherwise.
@@ -121,13 +138,14 @@ tea.NewProgram(frame).Run()
 ## Demo
 
 ```sh
-go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Meter/Status, Table/Pairs
+go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Meter/Status, Table/Pairs, Overlay
 go run ./examples/themed  # live theme switching — press t to cycle palettes
 ```
 
 Number keys switch pages; on the Panels page `Tab` switches sub-panels; on the
 Search page `/` focuses the field (and digits then type instead of navigating); on
-the Table page any key starts the simulated transfer.
+the Table page any key starts the simulated transfer; on the Overlay page `p`
+pins the popup to the next anchor and `hjkl` nudges it.
 
 ## License
 

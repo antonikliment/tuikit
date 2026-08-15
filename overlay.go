@@ -30,6 +30,8 @@ type Overlay struct {
 	// close and scroll keys. The row is always drawn, so these cost no height;
 	// acting on them is the host's job (see Update).
 	Help []key.Binding
+	// Align pins the box in the frame. NewOverlay centers it.
+	Align Alignment
 
 	title   string
 	vp      viewport.Model
@@ -42,21 +44,35 @@ type Overlay struct {
 // it always fits.
 const (
 	minOverlayWidth = 24
-	// Border (2) + title row + hint row + one row of text: the smallest box
-	// that still shows something.
-	minOverlayHigh = 5
+	// Border (2) + title row + divider + hint row + one row of text: the
+	// smallest box that still shows something.
+	minOverlayHigh = 6
 	// Border (2) + horizontal padding (2).
 	overlayHChrome = 4
-	// Border (2) + title row (1) + hint row (1).
-	overlayVChrome = 4
+	// Border (2) + title row (1) + divider (1) + hint row (1).
+	overlayVChrome = 5
 	// Cells of the host's view left showing on each side, so the popup reads as
 	// floating over it rather than replacing it.
 	overlayMargin = 1
 )
 
-// NewOverlay returns a closed Overlay drawing from the given theme.
+// Alignment pins an Overlay in its frame: an edge (or center) on each axis,
+// plus a nudge in cells. Positive Shift moves right and down. The box is kept
+// inside the frame whatever the shift asks for.
+type Alignment struct {
+	Horizontal lipgloss.Position // lipgloss.Left, Center, Right
+	Vertical   lipgloss.Position // lipgloss.Top, Center, Bottom
+	ShiftX     int
+	ShiftY     int
+}
+
+// NewOverlay returns a closed Overlay drawing from the given theme, centered.
 func NewOverlay(theme Theme) Overlay {
-	return Overlay{Theme: theme, vp: viewport.New()}
+	return Overlay{
+		Theme: theme,
+		Align: Alignment{Horizontal: lipgloss.Center, Vertical: lipgloss.Center},
+		vp:    viewport.New(),
+	}
 }
 
 // Open shows content under the given title, scrolled to the top. Calling it on
@@ -120,8 +136,8 @@ func (o *Overlay) Render(bg string, width, height int) string {
 		return bg
 	}
 	box := o.box(width, height)
-	x := max(0, (width-lipgloss.Width(box))/2)
-	y := max(0, (height-lipgloss.Height(box))/2)
+	x := place(width-lipgloss.Width(box), o.Align.Horizontal, o.Align.ShiftX)
+	y := place(height-lipgloss.Height(box), o.Align.Vertical, o.Align.ShiftY)
 	// A Layer's X/Y only take effect through a Compositor — drawn straight onto
 	// a Canvas it lands at the origin.
 	layers := lipgloss.NewCompositor(
@@ -144,7 +160,10 @@ func (o *Overlay) box(width, height int) string {
 	innerW := max(1, boxW-overlayHChrome)
 	wrapped := ansi.Wrap(o.content, innerW, "")
 	boxH := fitOverlay(lipgloss.Height(wrapped)+overlayVChrome, minOverlayHigh, height)
-	innerH := max(1, boxH-overlayVChrome)
+	// On a frame too short for the full chrome the divider is the first thing to
+	// go: it is decoration, while the title, a row of text, and the hint are not.
+	divider := boxH >= minOverlayHigh
+	innerH := max(1, boxH-overlayVChrome+boolToInt(!divider))
 
 	o.vp.SetWidth(innerW)
 	o.vp.SetHeight(innerH)
@@ -157,8 +176,13 @@ func (o *Overlay) box(width, height int) string {
 	rows := []string{
 		o.Theme.Accent(accent).Bold(true).Render(ansi.Truncate(o.title, innerW, "…")),
 		o.vp.View(),
-		ansi.Truncate(o.hint(), innerW, "…"),
 	}
+	if divider {
+		// A muted rule separates the content from the keys that act on it, so a
+		// dense report does not run straight into its own footer.
+		rows = append(rows, o.Theme.MutedStyle().Render(strings.Repeat("─", innerW)))
+	}
+	rows = append(rows, ansi.Truncate(o.hint(), innerW, "…"))
 	panel := Panel{Theme: o.Theme, Accent: accent, Width: boxW, Height: boxH}
 	return panel.Render(strings.Join(rows, "\n"))
 }
@@ -177,6 +201,19 @@ func (o *Overlay) hint() string {
 // viewport knows whether it scrolls.
 func (o *Overlay) fullHint() string {
 	return HelpLine(append([]key.Binding{overlayKeys.close, overlayKeys.scroll}, o.Help...)...)
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// place turns leftover space on one axis into an offset for the box, then
+// clamps so a shift can never push it off the frame.
+func place(slack int, pos lipgloss.Position, shift int) int {
+	return min(max(0, int(float64(max(0, slack))*float64(pos))+shift), max(0, slack))
 }
 
 // fitOverlay sizes one axis: grow to want, keep at least minimum, stay inside

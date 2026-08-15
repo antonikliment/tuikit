@@ -20,9 +20,9 @@ import (
 func main() {
 	frame := tuikit.New(
 		tuikit.WithBrand("tuikit", "reusable TUI frame kit"),
-		tuikit.WithPages(newPanelsPage(), newReaderPage(), newAboutPage(), newSearchPage(), newWidgetsPage(), newTablePage()),
+		tuikit.WithPages(newPanelsPage(), newReaderPage(), newAboutPage(), newSearchPage(), newWidgetsPage(), newTablePage(), newOverlayPage()),
 		tuikit.WithStatus(func() (string, tuikit.Level) {
-			return "press 1-6 to switch pages", tuikit.LevelInfo
+			return "press 1-7 to switch pages", tuikit.LevelInfo
 		}),
 	)
 	if _, err := tea.NewProgram(frame).Run(); err != nil {

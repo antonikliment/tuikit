@@ -121,6 +121,54 @@ func TestOverlayAlwaysKeepsTitleHintAndOneTextRow(t *testing.T) {
 	}
 }
 
+// The divider is decoration, so it is the first row dropped when the frame is
+// too short for the full chrome.
+func TestOverlayDividerSeparatesContentFromHint(t *testing.T) {
+	o := testOverlay()
+	o.Open("context", "body")
+	if got := ansi.Strip(o.Render(background(40, 20), 40, 20)); !strings.Contains(got, "─────") {
+		t.Fatalf("expected a divider above the hint row:\n%s", got)
+	}
+	if got := ansi.Strip(o.Render(background(30, 5), 30, 5)); !strings.Contains(got, "esc close") {
+		t.Fatalf("a cramped frame must keep the hint, dropping the divider:\n%s", got)
+	}
+}
+
+func TestOverlayAlignmentPinsAndShiftsTheBox(t *testing.T) {
+	const w, h = 60, 20
+	boxAt := func(align Alignment) (col, row int) {
+		o := testOverlay()
+		o.Align = align
+		o.Open("t", "body")
+		for y, line := range strings.Split(ansi.Strip(o.Render(background(w, h), w, h)), "\n") {
+			if i := strings.Index(line, "┌"); i >= 0 {
+				return i, y
+			}
+		}
+		return -1, -1
+	}
+
+	centerX, centerY := boxAt(Alignment{Horizontal: lipgloss.Center, Vertical: lipgloss.Center})
+	topLeftX, topLeftY := boxAt(Alignment{Horizontal: lipgloss.Left, Vertical: lipgloss.Top})
+	if topLeftX != 0 || topLeftY != 0 {
+		t.Fatalf("top-left = (%d,%d), want (0,0)", topLeftX, topLeftY)
+	}
+	if centerX <= topLeftX || centerY <= topLeftY {
+		t.Fatalf("centered = (%d,%d), should sit past top-left", centerX, centerY)
+	}
+
+	shiftedX, shiftedY := boxAt(Alignment{Horizontal: lipgloss.Left, Vertical: lipgloss.Top, ShiftX: 3, ShiftY: 2})
+	if shiftedX != 3 || shiftedY != 2 {
+		t.Fatalf("shifted = (%d,%d), want (3,2)", shiftedX, shiftedY)
+	}
+
+	// A shift past the edge is clamped, never drawn off-frame.
+	clampedX, clampedY := boxAt(Alignment{Horizontal: lipgloss.Right, Vertical: lipgloss.Bottom, ShiftX: 99, ShiftY: 99})
+	if clampedX+lipgloss.Width("┌") > w || clampedY >= h {
+		t.Fatalf("clamped = (%d,%d), want inside %dx%d", clampedX, clampedY, w, h)
+	}
+}
+
 func TestOverlayHintShowsHostBindings(t *testing.T) {
 	o := testOverlay()
 	o.Help = []key.Binding{key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh"))}
