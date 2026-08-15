@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -86,12 +87,48 @@ func TestOverlayRenderShowsTitleContentAndHintOverBackground(t *testing.T) {
 	}
 }
 
-func TestOverlayRenderSurvivesTinyFrame(t *testing.T) {
+// Content larger than the frame — the case that would push the box past the
+// terminal edge if it were not clamped.
+func TestOverlayRenderClampsOversizedContent(t *testing.T) {
+	for _, size := range []struct{ w, h int }{{8, 4}, {40, 10}} {
+		o := testOverlay()
+		o.Open("help", strings.Repeat("a very long line that cannot possibly fit\n", 40))
+		out := ansi.Strip(o.Render(background(size.w, size.h), size.w, size.h))
+		if got := lipgloss.Height(out); got != size.h {
+			t.Fatalf("%dx%d: height = %d", size.w, size.h, got)
+		}
+		for i, line := range strings.Split(out, "\n") {
+			if got := ansi.StringWidth(line); got != size.w {
+				t.Fatalf("%dx%d: line %d width = %d", size.w, size.h, i, got)
+			}
+		}
+	}
+}
+
+// However cramped the frame, the box keeps its title, its hint row, and at
+// least one row of text — squeezing any of them out would leave a popup with no
+// visible way to dismiss it.
+func TestOverlayAlwaysKeepsTitleHintAndOneTextRow(t *testing.T) {
+	for _, size := range []struct{ w, h int }{{80, 24}, {40, 8}, {30, 6}, {30, 5}, {24, 4}} {
+		o := testOverlay()
+		o.Open("help", "FIRSTROW\nsecond\nthird\nfourth\nfifth\nsixth")
+		out := ansi.Strip(o.Render(background(size.w, size.h), size.w, size.h))
+		for _, want := range []string{"help", "FIRSTROW", "esc close"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("%dx%d: missing %q:\n%s", size.w, size.h, want, out)
+			}
+		}
+	}
+}
+
+func TestOverlayHintShowsHostBindings(t *testing.T) {
 	o := testOverlay()
-	o.Open("help", "a very long line that cannot possibly fit in here")
-	out := ansi.Strip(o.Render(background(8, 4), 8, 4))
-	if got := lipgloss.Height(out); got != 4 {
-		t.Fatalf("tiny frame height = %d, want 4", got)
+	o.Help = []key.Binding{key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh"))}
+	o.Open("context", "short")
+
+	out := ansi.Strip(o.Render(background(60, 20), 60, 20))
+	if !strings.Contains(out, "esc close") || !strings.Contains(out, "r refresh") {
+		t.Fatalf("hint row should carry both built-in and host bindings:\n%s", out)
 	}
 }
 

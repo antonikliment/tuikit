@@ -26,6 +26,10 @@ type Overlay struct {
 	Theme Theme
 	// Accent is the border color. Zero means the theme's Brand.
 	Accent color.Color
+	// Help is extra bindings to advertise in the hint row, after the built-in
+	// close and scroll keys. The row is always drawn, so these cost no height;
+	// acting on them is the host's job (see Update).
+	Help []key.Binding
 
 	title   string
 	vp      viewport.Model
@@ -33,17 +37,21 @@ type Overlay struct {
 	content string
 }
 
-// Overlay geometry: the box takes overlayRatio of each terminal axis, floored
-// at the minimums so it stays legible (and non-negative) on a tiny terminal.
+// Overlay geometry: the box sizes itself to its content, floored at the
+// minimums so a one-line popup still reads as a box and capped at the frame so
+// it always fits.
 const (
-	overlayRatioNum = 4
-	overlayRatioDen = 5
-	minOverlayWidth = 20
-	minOverlayHigh  = 5
+	minOverlayWidth = 24
+	// Border (2) + title row + hint row + one row of text: the smallest box
+	// that still shows something.
+	minOverlayHigh = 5
 	// Border (2) + horizontal padding (2).
 	overlayHChrome = 4
 	// Border (2) + title row (1) + hint row (1).
 	overlayVChrome = 4
+	// Cells of the host's view left showing on each side, so the popup reads as
+	// floating over it rather than replacing it.
+	overlayMargin = 1
 )
 
 // NewOverlay returns a closed Overlay drawing from the given theme.
@@ -68,6 +76,9 @@ func (o *Overlay) IsOpen() bool { return o.open }
 
 // Title is the title the Overlay was opened with.
 func (o *Overlay) Title() string { return o.title }
+
+// Content is the text the Overlay was opened with, unwrapped.
+func (o *Overlay) Content() string { return o.content }
 
 // Update offers a message to an open Overlay and reports whether it was
 // claimed. Esc and "q" close it; the arrow/page/home/end keys scroll. A closed
@@ -94,8 +105,11 @@ func (o *Overlay) Update(msg tea.Msg) bool {
 }
 
 var overlayKeys = struct{ close, scroll key.Binding }{
-	close:  key.NewBinding(key.WithKeys("esc", "q")),
-	scroll: key.NewBinding(key.WithKeys("up", "down", "k", "j", "pgup", "pgdown", "home", "end")),
+	close: key.NewBinding(key.WithKeys("esc", "q"), key.WithHelp("esc", "close")),
+	scroll: key.NewBinding(
+		key.WithKeys("up", "down", "k", "j", "pgup", "pgdown", "home", "end"),
+		key.WithHelp("↑↓", "scroll"),
+	),
 }
 
 // Render composites the Overlay over bg, centered in a width×height frame. The
@@ -119,13 +133,22 @@ func (o *Overlay) Render(bg string, width, height int) string {
 
 // box draws the panel itself: title, scrolling content, and the dismiss hint.
 func (o *Overlay) box(width, height int) string {
-	boxW := clampOverlay(width*overlayRatioNum/overlayRatioDen, minOverlayWidth, width)
-	boxH := clampOverlay(height*overlayRatioNum/overlayRatioDen, minOverlayHigh, height)
-	innerW, innerH := max(1, boxW-overlayHChrome), max(1, boxH-overlayVChrome)
+	// Grow to the content, then clamp: a short report gets a small box and a
+	// wide table gets as much of the frame as it needs — short of the edges, so
+	// the view underneath still frames the popup as floating. The vertical
+	// chrome reserves the title and the "esc close" row, which never scroll.
+	// The hint row counts toward the width: a narrow report must not truncate
+	// the line telling the reader how to get out of it.
+	want := max(lipgloss.Width(o.content), lipgloss.Width(o.title), lipgloss.Width(o.fullHint()))
+	boxW := fitOverlay(want+overlayHChrome, minOverlayWidth, width)
+	innerW := max(1, boxW-overlayHChrome)
+	wrapped := ansi.Wrap(o.content, innerW, "")
+	boxH := fitOverlay(lipgloss.Height(wrapped)+overlayVChrome, minOverlayHigh, height)
+	innerH := max(1, boxH-overlayVChrome)
 
 	o.vp.SetWidth(innerW)
 	o.vp.SetHeight(innerH)
-	o.vp.SetContent(ansi.Wrap(o.content, innerW, ""))
+	o.vp.SetContent(wrapped)
 
 	accent := o.Accent
 	if accent == nil {
@@ -134,23 +157,32 @@ func (o *Overlay) box(width, height int) string {
 	rows := []string{
 		o.Theme.Accent(accent).Bold(true).Render(ansi.Truncate(o.title, innerW, "…")),
 		o.vp.View(),
-		o.Theme.SubtleStyle().Render(o.hint()),
+		ansi.Truncate(o.hint(), innerW, "…"),
 	}
-	panel := Panel{Theme: o.Theme, Accent: accent, Width: boxW - 2, Height: boxH - 2}
+	panel := Panel{Theme: o.Theme, Accent: accent, Width: boxW, Height: boxH}
 	return panel.Render(strings.Join(rows, "\n"))
 }
 
-// hint is the bottom row; it drops the scroll half once everything fits.
+// hint is the always-drawn bottom row: the close key, the scroll keys once
+// there is anything to scroll, then whatever the host put in Help.
 func (o *Overlay) hint() string {
-	if o.vp.AtTop() && o.vp.AtBottom() {
-		return "esc close"
+	bindings := []key.Binding{overlayKeys.close}
+	if !o.vp.AtTop() || !o.vp.AtBottom() {
+		bindings = append(bindings, overlayKeys.scroll)
 	}
-	return "esc close · ↑↓ scroll"
+	return HelpLine(append(bindings, o.Help...)...)
 }
 
-func clampOverlay(v, lo, hi int) int {
-	if hi < lo {
-		return hi
-	}
-	return min(max(v, lo), hi)
+// fullHint is the widest the hint row can get — used for sizing, before the
+// viewport knows whether it scrolls.
+func (o *Overlay) fullHint() string {
+	return HelpLine(append([]key.Binding{overlayKeys.close, overlayKeys.scroll}, o.Help...)...)
+}
+
+// fitOverlay sizes one axis: grow to want, keep at least minimum, stay inside
+// the frame's margin — and, when the frame is too small for even the minimum,
+// take the whole frame rather than overflow it.
+func fitOverlay(want, minimum, frame int) int {
+	size := max(want, minimum)
+	return max(1, min(size, max(minimum, frame-overlayMargin*2), frame))
 }
