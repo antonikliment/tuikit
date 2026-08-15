@@ -31,6 +31,8 @@
 //   - [Theme.TabStrip] — just the row of active/inactive tab chips.
 //   - [Theme.PanelStyle] and [Panel] — bordered panels with a focused state.
 //   - [SearchView] — a searchable viewport with follow-to-bottom behavior.
+//   - [Overlay] — a dismissable modal popup composited over a finished view,
+//     pinnable to any of nine anchors via [Alignment].
 //   - [Theme.ActionRow] — a labelled row of selectable actions.
 //   - [Help] and [HelpLine] — bright full and one-line keyboard help.
 //   - [Meter] — a fixed-width resource gauge over bubbles/progress.
