@@ -30,6 +30,15 @@ reflows, and closing it leaves the page exactly as it was:
 
 ![Overlay](docs/gifs/overlay.gif)
 
+`StreamingMarkdown`, from `go run ./examples/streaming`. A generated document
+arrives a character at a time; blocks that have settled are formatted and
+cached, and the rest is shown verbatim below the `boundary` rule that `-debug`
+draws. Watch a code fence stream as plain text and snap to highlighted the
+moment it closes — the answer never sits unformatted waiting for the stream to
+end:
+
+![Streaming markdown](docs/gifs/streaming.gif)
+
 <details>
 <summary>Static screenshots</summary>
 
@@ -45,9 +54,9 @@ reflows, and closing it leaves the page exactly as it was:
 | --- | --- |
 | ![Widgets page](docs/screenshots/5-widgets.png) | ![Table page](docs/screenshots/6-table.png) |
 
-| Overlay (modal popup, pinned right) |
-| --- |
-| ![Overlay page](docs/screenshots/7-overlay.png) |
+| Overlay (modal popup, pinned right) | Streaming markdown (boundary shown) |
+| --- | --- |
+| ![Overlay page](docs/screenshots/7-overlay.png) | ![Streaming page](docs/screenshots/streaming.png) |
 
 </details>
 

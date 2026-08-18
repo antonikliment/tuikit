@@ -12,8 +12,8 @@ terminal theme, and it is reproducible on any machine with Python.
         docs/gifs/table.gif docs/screenshots/6-table.png -- /tmp/tuikit-demo
     magick docs/gifs/table.gif -layers optimize -colors 96 docs/gifs/table.gif
 
-Keystrokes and timing come from SCRIPT below; retarget it to record another
-page. Run it from the repository root.
+Keystrokes and timing come from SCRIPTS below; RECORD=<name> picks one, and a
+new entry records another page. Run it from the repository root.
 """
 
 import fcntl
@@ -33,17 +33,25 @@ FONT_PATH = "/usr/share/fonts/TTF/JetBrainsMonoNerdFontMono-Regular.ttf"
 FONT_SIZE = 13
 PAD = 16
 FRAME_MS = 120
+QUIET_MS = 8  # gap in pty output that marks a repaint as finished
 BG = (13, 17, 23)
 FG = (200, 205, 212)
 
-# (delay before, keys to send, capture from here on)
-SCRIPT = [
-    (2.6, None, False),   # let the demo paint its first page
-    (0.0, "6", True),     # Table page
-    (2.4, " ", True),     # any key starts the simulated transfer
-    (7.0, None, True),
-]
-STILL_AT = 4.2  # seconds into the capture, bar part-way across
+# Named recordings: (delay before, keys to send, capture from here on) plus the
+# offset the still is taken at. Pick one with RECORD=<name>.
+SCRIPTS = {
+    "table": ([
+        (2.6, None, False),   # let the demo paint its first page
+        (0.0, "6", True),     # Table page
+        (2.4, " ", True),     # any key starts the simulated transfer
+        (7.0, None, True),
+    ], 4.2),                  # bar part-way across
+    "streaming": ([
+        (1.5, None, False),   # let the first blocks arrive
+        (20.0, None, True),   # the stream renders itself; no input needed
+    ], 17.0),                 # far enough in for a closed fence to have settled
+}
+SCRIPT, STILL_AT = SCRIPTS[os.environ.get("RECORD", "table")]
 
 # pyte reports ANSI names; the rest arrive as bare hex.
 NAMED = {
@@ -82,13 +90,14 @@ def run(command):
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
 
     frames, start, capturing = [], time.time(), False
+    last, dirty = 0.0, False
     for delay, keys, capture in SCRIPT:
         if keys:
             os.write(fd, keys.encode())
         capturing = capturing or capture
         deadline = time.time() + delay
         while time.time() < deadline:
-            ready, _, _ = select.select([fd], [], [], FRAME_MS / 1000)
+            ready, _, _ = select.select([fd], [], [], QUIET_MS / 1000)
             if ready:
                 try:
                     data = os.read(fd, 65536)
@@ -97,8 +106,17 @@ def run(command):
                 if not data:
                     break
                 stream.feed(data)
-            if capturing:
-                frames.append((time.time() - start, snapshot(screen)))
+                dirty = True
+                continue
+            # The pty has gone quiet, so the last repaint is complete. Sampling
+            # while a write is still in flight catches the screen mid-escape-
+            # sequence and tears the frame — a program that repaints on every
+            # character is almost always mid-write. Waiting for the gap is what
+            # makes each captured frame a whole one.
+            now = time.time()
+            if capturing and dirty and now - last >= FRAME_MS / 1000:
+                last, dirty = now, False
+                frames.append((now - start, snapshot(screen)))
     os.write(fd, b"\x03")
     time.sleep(0.3)
     os.close(fd)

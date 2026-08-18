@@ -18,6 +18,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/antonikliment/tuikit"
 	"github.com/antonikliment/tuikit/markdown"
@@ -33,9 +34,11 @@ func main() {
 	flag.Parse()
 
 	theme := tuikit.DefaultTheme()
+	render := markdown.New(theme)
 	page := &streamPage{
 		theme:     theme,
-		streamer:  tuikit.NewStreamingMarkdown(markdown.New(theme)),
+		render:    render,
+		streamer:  tuikit.NewStreamingMarkdown(render),
 		generator: newGenerator(*seed, *block),
 		view:      tuikit.NewSearchView(),
 		debug:     *debug,
@@ -71,6 +74,7 @@ type tick time.Time
 type streamPage struct {
 	theme     tuikit.Theme
 	streamer  tuikit.StreamingMarkdown
+	render    tuikit.RenderFunc
 	generator *generator
 	view      tuikit.SearchView
 	interval  time.Duration
@@ -135,20 +139,23 @@ func (p *streamPage) View(width, height int) string {
 		Render(p.view.View(body, max(1, height-4)))
 }
 
-// annotate draws a rule where the renderer cut the buffer, so the boundary is
-// visible as it advances.
+// annotate rebuilds the view with a rule at the cut, so the boundary is visible
+// as it advances. It renders the two halves itself rather than splicing the
+// component's output: the settled part and the tail are joined by a blank line,
+// but so are blocks *within* each half, so there is no offset to splice at.
 func (p *streamPage) annotate(width int) string {
 	settled, tail := p.split()
 	rule := p.theme.SubtleStyle().Render(strings.Repeat("─", max(4, width/2)) + " boundary")
-	if tail == "" {
-		return p.rendered + "\n" + rule
+
+	parts := make([]string, 0, 3)
+	if settled != "" {
+		parts = append(parts, p.render(settled, width))
 	}
-	// The rendered form and the raw tail are joined by a blank line, so the
-	// tail is whatever follows the last one.
-	if cut := strings.LastIndex(p.rendered, "\n\n"); cut >= 0 && settled != "" {
-		return p.rendered[:cut] + "\n" + rule + "\n" + p.rendered[cut+2:]
+	parts = append(parts, rule)
+	if trimmed := strings.TrimSpace(tail); trimmed != "" {
+		parts = append(parts, ansi.Wrap(trimmed, width, ""))
 	}
-	return rule + "\n" + p.rendered
+	return strings.Join(parts, "\n")
 }
 
 // split reports how the buffer is currently divided, asking the renderer rather
