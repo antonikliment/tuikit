@@ -227,6 +227,29 @@ much throttles it. A rate floor was tried to flatten the right-hand side: it
 helps there and causes starvation where material is scarce, and does nothing at
 the default, so it was not kept.
 
+### Watch it
+
+The same seed and rate recorded both ways, at chat-sized blocks. The recorder
+stamps a clock on every frame and keeps sampling while the screen is unchanged,
+because the thing being compared is how long the display stops moving — a still
+frame cannot show it, and a GIF that drops unchanged frames hides it.
+
+Round one, `-hold=0`: five freezes over half a second, the longest 2.0 s.
+
+![eager clock](../gifs/reveal-eager.gif)
+
+With the adaptive buffer, `-hold=1`: two freezes, the longest 0.8 s. The status
+bar shows the reserve it is holding to pay for that.
+
+![buffered clock](../gifs/reveal-buffered.gif)
+
+```
+RECORD=reveal-eager    scripts/record.py docs/gifs/reveal-eager.gif    /tmp/eager.png \
+    -- ./streaming -seed=7 -cps=200 -block=3 -reveal -debug -hold=0
+RECORD=reveal-buffered scripts/record.py docs/gifs/reveal-buffered.gif /tmp/buffered.png \
+    -- ./streaming -seed=7 -cps=200 -block=3 -reveal -debug
+```
+
 **It does not rescue the pathological case.** At `-block=12` the freeze only
 halves, and the reason is not the policy — underrun tracks the freeze almost
 exactly, meaning the queue is genuinely empty. There is no reserve to hold

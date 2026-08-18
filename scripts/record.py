@@ -50,8 +50,28 @@ SCRIPTS = {
         (1.5, None, False),   # let the first blocks arrive
         (20.0, None, True),   # the stream renders itself; no input needed
     ], 17.0),                 # far enough in for a closed fence to have settled
+    # The two rounds of the display clock, same seed and rate, so the pair can
+    # be watched against each other. Both are stamped with a clock (see draw)
+    # because the thing being compared is *how long the screen stops moving*,
+    # which no still frame shows.
+    "reveal-eager": ([
+        (0.4, None, False),
+        (24.0, None, True),
+    ], 12.0),
+    "reveal-buffered": ([
+        (0.4, None, False),
+        (24.0, None, True),
+    ], 12.0),
 }
-SCRIPT, STILL_AT = SCRIPTS[os.environ.get("RECORD", "table")]
+RECORD = os.environ.get("RECORD", "table")
+SCRIPT, STILL_AT = SCRIPTS[RECORD]
+
+# A clocked recording stamps every frame with elapsed time and keeps sampling
+# while the screen is unchanged. Both are needed to record a *freeze*: a program
+# that has stopped drawing emits nothing, so the usual dirty-and-deduplicate
+# path would collapse the freeze into a single frame and the clock would appear
+# to stop with it.
+CLOCK = RECORD.startswith("reveal-")
 
 # pyte reports ANSI names; the rest arrive as bare hex.
 NAMED = {
@@ -114,7 +134,7 @@ def run(command):
             # character is almost always mid-write. Waiting for the gap is what
             # makes each captured frame a whole one.
             now = time.time()
-            if capturing and dirty and now - last >= FRAME_MS / 1000:
+            if capturing and (dirty or CLOCK) and now - last >= FRAME_MS / 1000:
                 last, dirty = now, False
                 frames.append((now - start, snapshot(screen)))
     os.write(fd, b"\x03")
@@ -128,7 +148,7 @@ def snapshot(screen):
     return [[screen.buffer[y][x] for x in range(COLS)] for y in range(ROWS)]
 
 
-def draw(buffer, font, cell_w, cell_h):
+def draw(buffer, font, cell_w, cell_h, t=None):
     image = Image.new("RGB", (COLS * cell_w + 2 * PAD, ROWS * cell_h + 2 * PAD), BG)
     canvas = ImageDraw.Draw(image)
     for y, row in enumerate(buffer):
@@ -142,6 +162,14 @@ def draw(buffer, font, cell_w, cell_h):
             if char.data.strip():
                 fg = BG if char.reverse else color(char.fg, FG)
                 canvas.text((px, py), char.data, font=font, fill=fg)
+    if t is not None:
+        # A wall clock, drawn by the recorder rather than the program, so two
+        # recordings of different builds share one timebase.
+        label = f"{t:5.1f}s"
+        w = font.getlength(label)
+        canvas.rectangle([image.width - PAD - w - 8, 2, image.width, PAD + cell_h],
+                         fill=BG)
+        canvas.text((image.width - PAD - w, 4), label, font=font, fill=(120, 190, 255))
     return image
 
 
@@ -157,10 +185,10 @@ def main():
 
     images, times, previous = [], [], None
     for t, buffer in frames:
-        if buffer == previous:
+        if buffer == previous and not CLOCK:
             continue
         previous = buffer
-        images.append(draw(buffer, font, cell_w, cell_h))
+        images.append(draw(buffer, font, cell_w, cell_h, t - frames[0][0] if CLOCK else None))
         times.append(t)
     if not images:
         sys.exit("no frames captured")
