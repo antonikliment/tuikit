@@ -6,3 +6,4 @@
 # Go workspace
 go.work
 go.work.sum
+.claude/worktrees/
