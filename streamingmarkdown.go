@@ -28,10 +28,9 @@ import (
 type StreamingMarkdown struct {
 	render RenderFunc
 
-	// Set by [WithSpeculativeTail]: render the unsettled tail as markdown,
-	// with its open constructs synthetically closed, instead of wrapping it
-	// verbatim.
-	speculate bool
+	// Set by [WithRawTail]: wrap the unsettled tail verbatim instead of
+	// rendering it with its open constructs closed.
+	rawTail bool
 
 	// Cache of the settled prefix: the source it was built from, the width it
 	// was laid out at, and the result. Keeping the source is what makes a
@@ -52,23 +51,17 @@ type StreamingMarkdown struct {
 // StreamingOption configures a [StreamingMarkdown].
 type StreamingOption func(*StreamingMarkdown)
 
-// WithSpeculativeTail renders the unsettled tail as markdown instead of showing
-// it raw, by appending synthetic closers for whatever constructs it leaves open
-// — the trick bracket matchers use, applied to "a **bold" so the emphasis has
-// something to close against. The closers are recomputed from scratch each
-// frame, so they never persist into settled output.
+// WithRawTail wraps the unsettled tail verbatim instead of rendering it, which
+// is what the component did before speculative closing existed.
 //
-// It buys two things the default gives up: no raw markdown is ever visible, and
-// a partial fence arrives *highlighted* rather than as plain text, since
-// CommonMark closes an open fence at the end of the document and a highlighting
-// renderer will lex what it has. Reflow shrinks with it, because the tail
-// already has the shape its block will settle into.
-//
-// The cost is a render of the tail on every frame it changes, against a wrap.
-// See BenchmarkRenderTail for the measurement on this repo's glamour renderer;
-// budget for it before turning this on over a fast stream.
-func WithSpeculativeTail() StreamingOption {
-	return func(s *StreamingMarkdown) { s.speculate = true }
+// The default costs a render of the tail on every frame it changes, where this
+// costs a wrap: 129µs against 3.2µs in BenchmarkRenderTail. That is immaterial
+// against a 16ms frame in one pane, and worth declining in a program repainting
+// several of them at speed. The visible difference is markers — "**bold" and
+// backticks appear on screen — and a partial fence arriving as plain text
+// rather than highlighted.
+func WithRawTail() StreamingOption {
+	return func(s *StreamingMarkdown) { s.rawTail = true }
 }
 
 // RenderFunc renders complete markdown at a wrap width. It is only ever called
@@ -85,8 +78,9 @@ func NewStreamingMarkdown(render RenderFunc, opts ...StreamingOption) StreamingM
 	return s
 }
 
-// Render lays out the buffer at the given width: settled blocks formatted, the
-// rest wrapped verbatim. Pass the whole buffer every frame — StreamingMarkdown
+// Render lays out the buffer at the given width: settled blocks formatted, and
+// the unsettled tail rendered with its open constructs closed (or wrapped
+// verbatim under [WithRawTail]). Pass the whole buffer every frame — StreamingMarkdown
 // keeps no copy of the text, so a caller is free to edit, truncate or replace
 // it between calls, and size is an argument rather than state, matching the
 // rest of the kit.
@@ -94,13 +88,9 @@ func NewStreamingMarkdown(render RenderFunc, opts ...StreamingOption) StreamingM
 // The result carries no styling of its own; wrap it in a [lipgloss.Style] to
 // color it.
 //
-// ponytail: the tail is deliberately unstyled and unindented, so a settling
-// block visibly reflows — a list gains bullets and indent, a fence gains a
-// margin. The alternative is to give the tail the shape its block will have
-// once settled, which removes the jump but needs a second scan beside
-// boundaryOf, tracking what the tail is *inside* rather than only where it is
-// safe to cut. That scan now exists: see [WithSpeculativeTail], which is opt-in
-// because it trades a wrap for a render on every frame the tail changes.
+// Block-level reflow survives either way: the tail is still a partial block, so
+// a list gains its bullet and a table its borders when the block settles. What
+// speculative closing removes is the inline half of that jump, and the markers.
 func (s *StreamingMarkdown) Render(text string, width int) string {
 	if width <= 0 {
 		return ""
@@ -119,10 +109,10 @@ func (s *StreamingMarkdown) Render(text string, width int) string {
 	return s.rendered + "\n\n" + s.tail(tail, width)
 }
 
-// tail lays out the unsettled remainder: wrapped verbatim by default, or
-// rendered with its open constructs closed under [WithSpeculativeTail].
+// tail lays out the unsettled remainder: rendered with its open constructs
+// closed, or wrapped verbatim under [WithRawTail].
 func (s *StreamingMarkdown) tail(tail string, width int) string {
-	if !s.speculate {
+	if s.rawTail {
 		return ansi.Wrap(tail, width, "")
 	}
 	if s.tailWidth != width || s.tailSource != tail {

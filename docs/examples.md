@@ -215,9 +215,11 @@ func (p *logsPage) View(width, height int) string {
 
 `StreamingMarkdown` formats markdown that has not finished arriving. Give it the
 whole buffer every frame; it renders the blocks that have provably settled,
-caches them, and wraps the rest verbatim. A code fence therefore streams as
-plain text and becomes highlighted the moment its closing fence lands, instead
-of the answer sitting unformatted until the stream ends.
+caches them, and renders the unsettled rest with its open constructs closed —
+`a **bold` is drawn bold rather than as asterisks. A partial code fence needs no
+such help: CommonMark ends an open fence at the end of the document, so it
+streams already highlighted. `WithRawTail` wraps the tail verbatim instead, for
+a host that would rather pay a wrap than a render every frame.
 
 The markdown engine is supplied rather than built in, so importing `tuikit` does
 not drag in goldmark and chroma. `tuikit/markdown` has a glamour-backed one:

@@ -2,9 +2,9 @@
 // endless generated markdown document, streamed a character at a time, so the
 // boundary handling can be watched rather than inferred from tests.
 //
-// Watch for a code fence appearing as plain text and snapping to highlighted
-// when it closes, the boundary advancing steadily rather than stalling, and no
-// corrupted output at high rates.
+// Watch for a partial code fence arriving already highlighted, the boundary
+// advancing steadily rather than stalling, and no corrupted output at high
+// rates. -raw restores the verbatim tail this shipped with first.
 //
 //	go run ./examples/streaming -seed=7 -cps=80 -block=3 -debug
 //	go run ./examples/streaming -seed=7 -cps=400 -block=12   # long fences
@@ -47,6 +47,7 @@ func main() {
 		block  = flag.Int("block", 3, "block size: sentences per paragraph, items per list, rows per table")
 		debug  = flag.Bool("debug", false, "mark the boundary and report prefix/tail sizes")
 		syntax = flag.String("syntax", markdown.DefaultSyntaxTheme, "chroma stylesheet for fenced code")
+		raw    = flag.Bool("raw", false, "wrap the unsettled tail verbatim instead of rendering it")
 
 		reveals   = flag.Bool("reveal", false, "play settled blocks out on a display clock instead of showing the raw tail")
 		revealCPS = flag.Int("reveal-cps", 0, "cells per second for the display clock; 0 matches -cps")
@@ -60,7 +61,7 @@ func main() {
 	page := &streamPage{
 		theme:     theme,
 		render:    render,
-		streamer:  tuikit.NewStreamingMarkdown(render),
+		streamer:  tuikit.NewStreamingMarkdown(render, streamOpts(*raw)...),
 		generator: newGenerator(*seed, *block),
 		view:      tuikit.NewSearchView(),
 		debug:     *debug,
@@ -288,4 +289,13 @@ func (p *streamPage) revealStatus(state string, level tuikit.Level) (string, tui
 	return fmt.Sprintf("%s — queued %dc | held %dc | in %s %dB | stalled %s",
 		state, p.reveal.Pending(), p.reveal.Reserve(p.policy),
 		open.kind, open.open, p.stalledFor.Round(time.Millisecond*100)), level
+}
+
+// streamOpts is a flag-to-option hop kept out of the struct literal above,
+// which is already dense enough.
+func streamOpts(raw bool) []tuikit.StreamingOption {
+	if raw {
+		return []tuikit.StreamingOption{tuikit.WithRawTail()}
+	}
+	return nil
 }

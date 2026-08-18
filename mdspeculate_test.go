@@ -57,7 +57,7 @@ func TestSpeculativeClosersNeverReachSettledOutput(t *testing.T) {
 		seen = append(seen, text)
 		return text
 	}
-	s := NewStreamingMarkdown(record, WithSpeculativeTail())
+	s := NewStreamingMarkdown(record)
 
 	const document = "a **bold** paragraph.\n\nand a second one.\n\n"
 	for i := 1; i <= len(document); i++ {
@@ -81,5 +81,28 @@ func BenchmarkCloseOpen(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		closeOpen(tail)
+	}
+}
+
+// The property that makes speculation safe to leave on: closing a construct may
+// add markers and it may drop a trailing one, but it must never lose or reorder
+// the text itself. Checked over every prefix of the corpus, which is where a
+// scan that mishandles a partial construct would show up.
+func TestCloseOpenPreservesText(t *testing.T) {
+	strip := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if strings.ContainsRune("*_~`[]()\\ \t\n", r) {
+				return -1
+			}
+			return r
+		}, s)
+	}
+	for name, doc := range corpus() {
+		for i := range len(doc) + 1 {
+			tail := doc[:i]
+			if got, want := strip(closeOpen(tail)), strip(tail); got != want {
+				t.Fatalf("%s at %d bytes: text changed\n got %q\nwant %q", name, i, got, want)
+			}
+		}
 	}
 }

@@ -48,8 +48,9 @@ SCRIPTS = {
     ], 4.2),                  # bar part-way across
     "streaming": ([
         (1.5, None, False),   # let the first blocks arrive
-        (20.0, None, True),   # the stream renders itself; no input needed
-    ], 17.0),                 # far enough in for a closed fence to have settled
+        (26.0, None, True),   # the stream renders itself; no input needed
+    ], 22.5),                 # on a code fence, which is what the tail handling
+                              # is most visibly doing something about
     # The two rounds of the display clock, same seed and rate, so the pair can
     # be watched against each other. Both are stamped with a clock (see draw)
     # because the thing being compared is *how long the screen stops moving*,

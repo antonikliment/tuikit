@@ -23,7 +23,7 @@ func counting(render RenderFunc, calls *int) RenderFunc {
 }
 
 func TestRenderFormatsSettledBlocksAndLeavesTheTailRaw(t *testing.T) {
-	s := NewStreamingMarkdown(upper)
+	s := NewStreamingMarkdown(upper, WithRawTail())
 	got := s.Render("settled block\n\nstill arriving", 40)
 	want := "[40]SETTLED BLOCK\n\nstill arriving"
 	if got != want {
@@ -35,7 +35,7 @@ func TestRenderFormatsSettledBlocksAndLeavesTheTailRaw(t *testing.T) {
 // not be called with a partial block at all.
 func TestRenderLeavesAnUnsettledBufferEntirelyRaw(t *testing.T) {
 	calls := 0
-	s := NewStreamingMarkdown(counting(upper, &calls))
+	s := NewStreamingMarkdown(counting(upper, &calls), WithRawTail())
 	if got, want := s.Render("- half a list item", 40), "- half a list item"; got != want {
 		t.Fatalf("Render = %q, want %q", got, want)
 	}
@@ -48,7 +48,7 @@ func TestRenderLeavesAnUnsettledBufferEntirelyRaw(t *testing.T) {
 // settled prefix must not be re-rendered for every one of them.
 func TestRenderReusesTheCacheWhileOnlyTheTailGrows(t *testing.T) {
 	calls := 0
-	s := NewStreamingMarkdown(counting(upper, &calls))
+	s := NewStreamingMarkdown(counting(upper, &calls), WithRawTail())
 	for _, tail := range []string{"a", "ab", "abc", "abcd"} {
 		s.Render("settled\n\n"+tail, 40)
 	}
@@ -59,7 +59,7 @@ func TestRenderReusesTheCacheWhileOnlyTheTailGrows(t *testing.T) {
 
 func TestRenderRebuildsTheCacheWhenTheWidthChanges(t *testing.T) {
 	calls := 0
-	s := NewStreamingMarkdown(counting(upper, &calls))
+	s := NewStreamingMarkdown(counting(upper, &calls), WithRawTail())
 	s.Render("settled\n\ntail", 40)
 	got := s.Render("settled\n\ntail", 80)
 	if calls != 2 {
@@ -85,7 +85,7 @@ func TestRenderRebuildsTheCacheWhenTheBufferIsRewritten(t *testing.T) {
 // A long fence shows as plain text while it streams and becomes formatted the
 // moment it closes — the behavior the component exists for.
 func TestRenderFormatsACodeFenceOnceItCloses(t *testing.T) {
-	s := NewStreamingMarkdown(upper)
+	s := NewStreamingMarkdown(upper, WithRawTail())
 	open := "intro\n\n```go\nfunc main() {"
 	if got := s.Render(open, 40); !strings.Contains(got, "```go") {
 		t.Fatalf("open fence = %q, want the raw fence still visible", got)
@@ -116,7 +116,7 @@ func TestRenderAccountsForEveryByteAtEveryChunkSize(t *testing.T) {
 			s := NewStreamingMarkdown(func(text string, width int) string {
 				settled = text
 				return upper(text, width)
-			})
+			}, WithRawTail())
 			for i := chunk; i <= len(doc)+chunk; i += chunk {
 				buffer := doc[:min(i, len(doc))]
 				got := s.Render(buffer, 40)

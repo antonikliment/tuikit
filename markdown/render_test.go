@@ -123,13 +123,13 @@ func TestWithSyntaxThemeChangesHighlighting(t *testing.T) {
 	}
 }
 
-// The two things [tuikit.WithSpeculativeTail] claims, checked against the real
+// The two things the speculative tail claims, checked against the real
 // engine rather than against the closer-appending scan, which cannot know what
 // goldmark and chroma will do with its output.
 func TestSpeculativeTailRendersWhatTheRawTailShows(t *testing.T) {
 	render := New(tuikit.DefaultTheme())
-	raw := tuikit.NewStreamingMarkdown(render)
-	spec := tuikit.NewStreamingMarkdown(render, tuikit.WithSpeculativeTail())
+	raw := tuikit.NewStreamingMarkdown(render, tuikit.WithRawTail())
+	spec := tuikit.NewStreamingMarkdown(render)
 
 	// No raw markdown: an unfinished emphasis arrives styled, not as asterisks.
 	const emphasis = "Settled prose.\n\nA paragraph with **bo"
@@ -149,8 +149,8 @@ func TestSpeculativeTailRendersWhatTheRawTailShows(t *testing.T) {
 	// end of the document, so chroma lexes the partial body and it arrives
 	// highlighted rather than as plain text.
 	const fence = "Settled prose.\n\n```go\nfunc main() {\n"
-	rawFence := tuikit.NewStreamingMarkdown(render)
-	specFence := tuikit.NewStreamingMarkdown(render, tuikit.WithSpeculativeTail())
+	rawFence := tuikit.NewStreamingMarkdown(render, tuikit.WithRawTail())
+	specFence := tuikit.NewStreamingMarkdown(render)
 	if got := rawFence.Render(fence, 50); strings.Contains(got, "\x1b[38") {
 		t.Errorf("the raw tail should not be highlighted: %q", got)
 	}
@@ -160,7 +160,7 @@ func TestSpeculativeTailRendersWhatTheRawTailShows(t *testing.T) {
 }
 
 // What speculation costs: the tail is re-rendered through glamour on every
-// frame it changes, where the default only wraps it. The settled prefix is
+// frame it changes, where [tuikit.WithRawTail] only wraps it. The settled prefix is
 // cached in both, so this is the per-frame difference and nothing else.
 func BenchmarkRenderTail(b *testing.B) {
 	render := New(tuikit.DefaultTheme())
@@ -168,13 +168,13 @@ func BenchmarkRenderTail(b *testing.B) {
 	grow := func(i int) string { return "Settled prose.\n\n" + tail + strings.Repeat("x", i%7) }
 
 	b.Run("wrap", func(b *testing.B) {
-		s := tuikit.NewStreamingMarkdown(render)
+		s := tuikit.NewStreamingMarkdown(render, tuikit.WithRawTail())
 		for i := 0; b.Loop(); i++ {
 			s.Render(grow(i), 80)
 		}
 	})
 	b.Run("speculative", func(b *testing.B) {
-		s := tuikit.NewStreamingMarkdown(render, tuikit.WithSpeculativeTail())
+		s := tuikit.NewStreamingMarkdown(render)
 		for i := 0; b.Loop(); i++ {
 			s.Render(grow(i), 80)
 		}
