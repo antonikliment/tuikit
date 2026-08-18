@@ -1,7 +1,9 @@
 # Revealing rendered markdown on a clock
 
-Status: **explored, not built.** A note so the idea and its costs survive; the
-next step is a forked experiment, not a library change.
+Status: **prototyped in the demo; not recommended for the kit.** The scan fix
+landed, the reveal clock was built behind `-reveal` in `examples/streaming`, and
+it measures worse than the raw tail on the case that matters. What follows is
+the original reasoning, then what the prototype actually showed.
 
 ## Where this comes from
 
@@ -82,37 +84,92 @@ glamour has not been measured here, but at roughly one block per few hundred
 milliseconds it is not plausibly the bottleneck. The substantive idea is the
 display clock; the asynchrony is not load-bearing. Measure before building it.
 
-## Measured: the scan is quadratic
+## Measured: the scan was quadratic — fixed
 
-Separately from any of the above, `boundaryOf` re-scans the whole prefix for
-link-reference definitions at every candidate blank line, and it runs every
-frame even when the cache hits.
+`boundaryOf` re-scanned the whole prefix for link-reference definitions at every
+candidate blank line, and it runs every frame even when the cache hits. It now
+carries a link-reference flag and the last non-blank line through a single
+forward pass, and holds a candidate cut until the following line proves it is
+not a setext underline — the only rule that needed to look ahead.
+`BenchmarkBoundaryOf`, on a corpus of settled blocks:
 
-| Buffer | Time per call |
-| --- | --- |
-| 1 KB | 1.9 µs |
-| 6 KB | 25 µs |
-| 24 KB | 301 µs |
-| 97 KB | 4.6 ms |
+| Buffer | Before | After |
+| --- | --- | --- |
+| 1 KB | 24 µs | 7 µs |
+| 9 KB | 809 µs | 45 µs |
+| 74 KB | 49 ms | 368 µs |
 
-Four times the input, roughly thirteen times the time. A single answer is
-usually 5–20 KB, so 25–300 µs a frame — unnoticeable. It only bites if the
-component is pointed at a whole transcript or a tailed file.
+Eight times the input is now eight times the time. Behaviour is unchanged,
+checked differentially against the previous implementation over random documents
+at every prefix length.
 
-Two fixes, both invisible to the user and both better than a buffer, which would
-only mask it:
+The second fix — skipping the already-settled region, which the monotonic-
+advance test proves is safe — is no longer worth its state. 368 µs a frame on a
+buffer nothing realistic reaches is not a cost worth caching against.
 
-- Track whether a link-reference has been seen during the single forward scan
-  instead of re-scanning the prefix at each candidate. Removes the quadratic.
-- Skip the already-settled region. A cut can only move forward — the
-  monotonic-advance test in `mdboundary_test.go` already proves that invariant.
+## Built: the reveal clock, behind `-reveal`
 
-## Suggested order
+`examples/streaming/reveal.go`, roughly 200 lines, no library API:
 
-1. Fix the scan. Invisible, removes the only measured cost.
-2. Fork and prototype the reveal clock **in the demo**, behind a flag, with the
-   same `-seed` so both modes can be watched side by side. No library API
-   involved. This is a UX bet, and the demo is the instrument that settles it.
-3. Only if it clearly feels better: decide on the fence fallback, the resize
-   handling, and whether the component grows a clock — or whether the cheaper
-   tail-shaping gets close enough.
+```
+go run ./examples/streaming -seed=7 -cps=200 -debug            # raw tail
+go run ./examples/streaming -seed=7 -cps=200 -debug -reveal    # display clock
+```
+
+Settled chunks are rendered once as they settle and queued; a second clock plays
+the queue out a cell at a time, cutting styled output on cell boundaries with
+`ansi.Truncate` so no escape is ever halved. Progress is counted in whole
+chunks plus an offset into the one playing, which is what makes resize
+survivable: finished chunks stay finished and only the head's offset is clamped,
+so a width change costs at most one chunk of position. `Step` raises the rate
+with the backlog, `Flush` snaps to the end for turn completion (`f` in the
+demo), and a rewritten buffer drops the queue rather than splicing two answers
+together.
+
+It delivers exactly what was predicted: **reflow is zero and no raw markdown is
+ever visible.** Every claim in the section above about what the idea buys holds.
+
+## What it cost: the stall is worse than predicted
+
+`TestRevealStallsWhileALongBlockIsStillArriving` runs the seeded stream
+headlessly at 200 cps for twenty seconds and counts the ticks where the queue is
+empty while bytes are still arriving — the display frozen mid-answer.
+
+| Blocks | Stalled | Freezes over 500 ms | Longest freeze |
+| --- | --- | --- | --- |
+| `-block=3` (chat-sized) | 18% | 2 | 1.8 s |
+| `-block=12` (long fences) | 84% | 2 | 11.3 s |
+
+The `-block=12` number is the one that settles it. Eleven seconds of a
+completely static screen while an answer is actively streaming is the freeze the
+glow author concluded was unfixable without glamour support, and this design
+reintroduces it wholesale. The raw tail is showing text throughout that same
+window.
+
+Even the chat-sized case is not clean: 18% of the stream frozen, with a 1.8 s
+pause. A stall is not visible if the display has merely caught up for a few
+frames, which is why the table counts freezes over half a second separately —
+those are the ones a viewer reads as a hang.
+
+## Conclusion
+
+Do not put the clock in the kit, and do not make it the demo's default. The
+trade is real but it is the wrong way round: it removes reflow, which is
+cosmetic and mostly invisible on prose, and buys a multi-second freeze on
+exactly the construct — a long fence — that the raw tail was built to handle.
+
+The prototype stays in the demo behind the flag. It is cheap to keep, it is the
+evidence for this conclusion, and it is where the escapes would be tried:
+
+- **The fence fallback would rescue it.** Falling back to the raw tail inside an
+  open fence removes the `-block=12` case entirely, since fences are what
+  produce the long stalls. The cost is that the visuals change mode mid-answer
+  and both paths need maintaining.
+- **Highlighting the partial fence directly** is the version worth wanting. The
+  info string names the language, so chroma can lex a partial body without
+  goldmark. That is the only route to streaming *inside* a fence, and it would
+  improve the current design too, with or without a clock.
+
+Neither is worth building for reflow alone. Revisit if the flash of raw markdown
+turns out to bother people in practice, which the demo can now answer either
+way.
