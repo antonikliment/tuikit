@@ -76,3 +76,49 @@ func TestNewReusesRenderersPerWidth(t *testing.T) {
 		t.Fatalf("width 70 rendered identically to width 20, want a different wrap")
 	}
 }
+
+// Fenced code must actually be highlighted: chroma only runs when the style
+// carries a theme name, and forgetting it renders code as plain text with no
+// error to notice.
+func TestNewHighlightsFencedCode(t *testing.T) {
+	got := New(tuikit.DefaultTheme())("```go\nfunc main() { return }\n```", 60)
+	if visible(got) == got {
+		t.Fatal("code block carries no ANSI styling at all")
+	}
+	// Distinct tokens must not all share one color, which is what a missing
+	// chroma theme looks like: styled as a block, unhighlighted within.
+	colors := map[string]bool{}
+	for _, token := range []string{"func", "main", "return"} {
+		if i := strings.Index(got, token); i > 0 {
+			colors[styleBefore(got[:i])] = true
+		}
+	}
+	if len(colors) < 2 {
+		t.Fatalf("keywords share one color %v, want chroma highlighting", colors)
+	}
+}
+
+// styleBefore returns the last ANSI escape sequence in s, i.e. the style in
+// force at the end of it.
+func styleBefore(s string) string {
+	last := strings.LastIndex(s, "\x1b[")
+	if last < 0 {
+		return ""
+	}
+	if end := strings.Index(s[last:], "m"); end > 0 {
+		return s[last : last+end+1]
+	}
+	return ""
+}
+
+func TestWithSyntaxThemeChangesHighlighting(t *testing.T) {
+	code := "```go\nfunc main() { return }\n```"
+	dark := New(tuikit.DefaultTheme(), WithSyntaxTheme("tokyonight-night"))(code, 60)
+	light := New(tuikit.DefaultTheme(), WithSyntaxTheme("tokyonight-day"))(code, 60)
+	if dark == light {
+		t.Fatal("dark and light syntax themes rendered identically")
+	}
+	if visible(dark) != visible(light) {
+		t.Fatalf("syntax theme changed the text, not just its color:\n%q\n%q", visible(dark), visible(light))
+	}
+}

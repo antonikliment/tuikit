@@ -241,6 +241,14 @@ func (p *answerPage) View(width, height int) string {
 }
 ```
 
+Fenced code is highlighted by chroma once its closing fence lands. Chroma ships
+named stylesheets rather than taking colors, so it cannot be driven from a
+`Theme` the way the rest of the styling is — pick one to match your palette:
+
+```go
+markdown.New(theme, markdown.WithSyntaxTheme("tokyonight-day"))
+```
+
 The result is unstyled text, so wrap it in a `lipgloss.Style` to color the
 portion that has not been formatted yet. `examples/streaming` drives it with an
 endless generated document and a `-debug` flag that marks the boundary:

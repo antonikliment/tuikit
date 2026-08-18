@@ -20,15 +20,49 @@ import (
 	"charm.land/glamour/v2/ansi"
 )
 
+// DefaultSyntaxTheme is the chroma stylesheet fenced code is highlighted with
+// when no other is given. Chroma ships named stylesheets rather than taking
+// colors, so a tuikit.Theme cannot drive highlighting the way it drives the
+// rest of the styling — pick one that suits your palette with
+// [WithSyntaxTheme]. The names come from chroma's styles package.
+const DefaultSyntaxTheme = "tokyonight-night"
+
+// Option configures the renderer.
+type Option func(*config)
+
+type config struct {
+	syntax  string
+	glamour []glamour.TermRendererOption
+}
+
+// WithSyntaxTheme sets the chroma stylesheet used for fenced code, overriding
+// [DefaultSyntaxTheme]. An unknown name leaves code unhighlighted rather than
+// failing. Light palettes want a light stylesheet — "tokyonight-day",
+// "catppuccin-latte" and "github" are reasonable starts.
+func WithSyntaxTheme(name string) Option {
+	return func(c *config) { c.syntax = name }
+}
+
+// WithGlamour passes options straight through to glamour, for anything this
+// package does not surface.
+func WithGlamour(opts ...glamour.TermRendererOption) Option {
+	return func(c *config) { c.glamour = append(c.glamour, opts...) }
+}
+
 // New returns a render function that formats markdown with glamour, colored
-// from theme. The returned function is safe to reuse across widths: it keeps
-// one renderer per width, since building one parses a stylesheet and starts a
-// goldmark pipeline — far too much to redo every frame.
+// from theme, with fenced code highlighted by chroma. The returned function is
+// safe to reuse across widths: it keeps one renderer per width, since building
+// one parses a stylesheet and starts a goldmark pipeline — far too much to redo
+// every frame.
 //
 // Rendering failures fall back to the input text: an answer that cannot be
 // styled must still be readable.
-func New(theme tuikit.Theme, opts ...glamour.TermRendererOption) tuikit.RenderFunc {
-	style := styleFor(theme)
+func New(theme tuikit.Theme, opts ...Option) tuikit.RenderFunc {
+	cfg := config{syntax: DefaultSyntaxTheme}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	style := styleFor(theme, cfg.syntax)
 	var mu sync.Mutex
 	renderers := map[int]*glamour.TermRenderer{}
 
@@ -48,7 +82,7 @@ func New(theme tuikit.Theme, opts ...glamour.TermRendererOption) tuikit.RenderFu
 			options := append([]glamour.TermRendererOption{
 				glamour.WithStyles(style),
 				glamour.WithWordWrap(width),
-			}, opts...)
+			}, cfg.glamour...)
 			built, err := glamour.NewTermRenderer(options...)
 			if err != nil {
 				return text
@@ -75,7 +109,7 @@ func trimPadding(out string) string {
 
 // styleFor maps a tuikit.Theme onto glamour's stylesheet. Only the elements the
 // theme has an opinion about are set; everything else keeps glamour's default.
-func styleFor(theme tuikit.Theme) ansi.StyleConfig {
+func styleFor(theme tuikit.Theme, syntax string) ansi.StyleConfig {
 	muted, brand := hex(theme.Muted), hex(theme.Brand)
 	blue, yellow := hex(theme.Blue), hex(theme.Yellow)
 	border := hex(theme.FocusBorder)
@@ -109,8 +143,11 @@ func styleFor(theme tuikit.Theme) ansi.StyleConfig {
 		Link:     ansi.StylePrimitive{Color: &blue, Underline: ptr(true)},
 		LinkText: ansi.StylePrimitive{Color: &blue},
 
-		Code:      ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &brand}},
-		CodeBlock: ansi.StyleCodeBlock{StyleBlock: ansi.StyleBlock{Margin: ptr(uint(2))}},
+		Code: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &brand}},
+		CodeBlock: ansi.StyleCodeBlock{
+			StyleBlock: ansi.StyleBlock{Margin: ptr(uint(2))},
+			Theme:      syntax,
+		},
 		Table: ansi.StyleTable{
 			StyleBlock:      block(ansi.StylePrimitive{}),
 			CenterSeparator: ptr("┼"),

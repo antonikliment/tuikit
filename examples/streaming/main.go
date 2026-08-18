@@ -26,15 +26,16 @@ import (
 
 func main() {
 	var (
-		seed  = flag.Uint64("seed", 1, "random seed; fix it to replay a stream exactly")
-		cps   = flag.Int("cps", 80, "characters per second")
-		block = flag.Int("block", 3, "block size: sentences per paragraph, items per list, rows per table")
-		debug = flag.Bool("debug", false, "mark the boundary and report prefix/tail sizes")
+		seed   = flag.Uint64("seed", 1, "random seed; fix it to replay a stream exactly")
+		cps    = flag.Int("cps", 80, "characters per second")
+		block  = flag.Int("block", 3, "block size: sentences per paragraph, items per list, rows per table")
+		debug  = flag.Bool("debug", false, "mark the boundary and report prefix/tail sizes")
+		syntax = flag.String("syntax", markdown.DefaultSyntaxTheme, "chroma stylesheet for fenced code")
 	)
 	flag.Parse()
 
 	theme := tuikit.DefaultTheme()
-	render := markdown.New(theme)
+	render := markdown.New(theme, markdown.WithSyntaxTheme(*syntax))
 	page := &streamPage{
 		theme:     theme,
 		render:    render,

@@ -33,9 +33,9 @@ reflows, and closing it leaves the page exactly as it was:
 `StreamingMarkdown`, from `go run ./examples/streaming`. A generated document
 arrives a character at a time; blocks that have settled are formatted and
 cached, and the rest is shown verbatim below the `boundary` rule that `-debug`
-draws. Watch a code fence stream as plain text and snap to highlighted the
-moment it closes — the answer never sits unformatted waiting for the stream to
-end:
+draws. Watch a code fence stream as plain text and snap to chroma-highlighted
+the moment it closes — the answer never sits unformatted waiting for the stream
+to end:
 
 ![Streaming markdown](docs/gifs/streaming.gif)
 
@@ -93,7 +93,8 @@ end:
   and snaps to highlighted the moment it closes, instead of the whole answer
   popping into shape at the end. Takes a `RenderFunc`; `tuikit/markdown`
   provides one backed by glamour, in a separate package so importing tuikit does
-  not pull in a markdown engine.
+  not pull in a markdown engine. Fenced code is highlighted by chroma;
+  `markdown.WithSyntaxTheme` picks the stylesheet.
 - **`Overlay`** — a dismissable floating panel: a titled, bordered, scrollable
   box drawn *over* the host's view rather than stacked above or below it, for
   the reference output (a help table, a usage report) that otherwise has nowhere
