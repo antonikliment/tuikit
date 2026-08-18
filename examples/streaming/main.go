@@ -45,6 +45,7 @@ func main() {
 		reveals   = flag.Bool("reveal", false, "play settled blocks out on a display clock instead of showing the raw tail")
 		revealCPS = flag.Int("reveal-cps", 0, "cells per second for the display clock; 0 matches -cps")
 		catchup   = flag.Duration("catchup", time.Second, "how long the display clock may take to drain its backlog")
+		hold      = flag.Float64("hold", 1, "multiplier on the reserve the display clock keeps unplayed; 0 plays it out as fast as it can")
 	)
 	flag.Parse()
 
@@ -63,9 +64,13 @@ func main() {
 		rate := max(1, cmp.Or(*revealCPS, *cps))
 		page.reveal = newReveal(render)
 		page.revealEvery = time.Second / time.Duration(rate)
-		// catchup is a duration so it reads the same however fast the clock
-		// runs; the backlog rule works in ticks.
-		page.catchup = max(1, int(float64(rate)*catchup.Seconds()))
+		page.policy = policy{
+			base: 1,
+			// catchup is a duration so it reads the same however fast the clock
+			// runs; the policy works in ticks.
+			catchup: max(1, int(float64(rate)*catchup.Seconds())),
+			hold:    *hold,
+		}
 	}
 
 	frame := tuikit.New(
@@ -114,7 +119,7 @@ type streamPage struct {
 	// plays settled blocks out a cell at a time.
 	reveal      *reveal
 	revealEvery time.Duration
-	catchup     int
+	policy      policy
 	stalledFor  time.Duration
 
 	buffer   string // everything emitted so far
@@ -178,7 +183,7 @@ func (p *streamPage) repaint() tea.Cmd {
 // answer: reflow is gone, but at the price of a display that stops while a long
 // block is still arriving.
 func (p *streamPage) paint() {
-	p.reveal.Advance(p.reveal.Step(1, p.catchup))
+	p.reveal.Tick(p.policy)
 	if p.reveal.Stalled() && p.pending != "" {
 		p.stalledFor += p.revealEvery
 		return
@@ -273,6 +278,8 @@ func (p *streamPage) revealStatus(state string, level tuikit.Level) (string, tui
 	if !p.debug {
 		return state + " — space pauses, c clears, f completes the turn, d shows the backlog", level
 	}
-	return fmt.Sprintf("%s — queued %dc | stalled %s | unsettled %dB",
-		state, p.reveal.Pending(), p.stalledFor.Round(time.Millisecond*100), len(p.buffer)-p.reveal.Settled()), level
+	open := p.reveal.Open()
+	return fmt.Sprintf("%s — queued %dc | held %dc | in %s %dB | stalled %s",
+		state, p.reveal.Pending(), p.reveal.Reserve(p.policy),
+		open.kind, open.open, p.stalledFor.Round(time.Millisecond*100)), level
 }

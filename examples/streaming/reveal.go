@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -42,6 +43,63 @@ type reveal struct {
 
 	consumed int // bytes of the buffer already cut into source
 	settled  string
+
+	// Pacing state. gaps measures how far apart settlements run, open says what
+	// the display is currently waiting on, and credit carries the fraction of a
+	// cell left over from the last tick — the policy returns a rate below one
+	// cell per tick whenever it is conserving.
+	gaps   gapEstimator
+	open   openState
+	credit float64
+}
+
+// policy is the pacing policy: how fast to play the queue out.
+//
+// The shape is buffer-based rate adaptation (Huang et al., SIGCOMM 2014):
+// steer off buffer occupancy alone and do not try to predict the producer. The
+// paper's three regions collapse to two here, because its bottom region — a
+// flat floor at the lowest rate — still drains to empty, and draining to empty
+// is the exact failure being fixed. A proportional drain decays toward empty
+// without reaching it, which is the same trick adaptive VoIP playout uses when
+// it time-scales speech rather than letting the buffer run dry.
+type policy struct {
+	base    float64 // cells per tick when the buffer is comfortable
+	catchup int     // ticks allowed to drain a backlog
+	hold    float64 // multiplier on the estimated reserve; 0 restores the old behaviour
+}
+
+// reserve is how many cells to keep unplayed, in the units Pending reports.
+//
+// This is where the open construct earns its place. It does not decide *when*
+// to buffer — the reserve is held continuously, because one built in reaction
+// to seeing a fence would be built out of the bytes that are not arriving. It
+// decides how hard to brake: the same backlog drains more slowly when the thing
+// being waited on has no predictable end.
+func (p policy) reserve(gaps *gapEstimator, open openState) float64 {
+	if p.hold <= 0 {
+		return 0
+	}
+	ticks := float64(gaps.Reserve())
+	if open.kind == openFence {
+		// A fence gives no sign that it is about to end, and settle gaps are
+		// heavy-tailed: the wait so far is the best lower bound on the wait
+		// remaining.
+		ticks = math.Max(ticks, float64(gaps.Waiting()))
+	}
+	return p.hold * p.base * ticks * patience(open.kind)
+}
+
+// patience is how much longer than usual to expect to wait, given what is open.
+// A paragraph or a list ends at the next blank line; a fence ends whenever it
+// ends.
+func patience(kind openKind) float64 {
+	switch kind {
+	case openFence:
+		return 3
+	case openContainer:
+		return 1.5
+	}
+	return 1
 }
 
 func newReveal(render tuikit.RenderFunc) *reveal {
@@ -70,6 +128,7 @@ func (r *reveal) Feed(buffer string, width int) {
 
 	r.boundary.Render(buffer, width)
 	cut := min(r.boundary.Settled(), len(buffer))
+	r.open = classify(buffer[cut:])
 	if cut <= r.consumed {
 		return
 	}
@@ -77,6 +136,7 @@ func (r *reveal) Feed(buffer string, width int) {
 	r.consumed, r.settled = cut, buffer[:cut]
 	r.source = append(r.source, block)
 	r.frame = append(r.frame, r.renderBlock(block))
+	r.gaps.Settled()
 }
 
 // renderBlock formats one settled chunk on its own. That is safe only because
@@ -134,16 +194,53 @@ func (r *reveal) Settled() int { return r.consumed }
 // trades the raw tail for, and the thing to watch for when judging it.
 func (r *reveal) Stalled() bool { return r.Pending() == 0 }
 
-// Step is how many cells to move this tick: the base rate, raised so that
-// whatever is queued clears within catchup ticks. Without that the lag grows
-// without bound — bytes arrive faster than a fixed clock plays them, and by the
-// end of a long answer the display is minutes behind.
-func (r *reveal) Step(base, catchup int) int {
-	if catchup <= 0 {
-		return base
+// Tick advances the display by one clock tick under p. Fractions of a cell
+// carry over, since the policy runs well below one cell a tick whenever it is
+// conserving.
+func (r *reveal) Tick(p policy) {
+	r.gaps.Tick()
+	r.credit += r.rate(p)
+	if n := int(r.credit); n > 0 {
+		r.credit -= float64(n)
+		r.Advance(n)
 	}
-	return max(base, r.Pending()/catchup)
 }
+
+// rate is how many cells to reveal this tick, in two regions:
+//
+//	pending >= reserve   base, or faster if there is a backlog to drain
+//	pending <  reserve   proportional: the emptier the queue, the slower it plays
+//
+// The lower region is the whole point. Below the reserve the drain scales with
+// what is left, so the queue decays toward empty rather than hitting it, and
+// the display keeps moving through a drought instead of freezing. It costs
+// steady-state latency — the reserve is always unplayed — which is the trade:
+// seconds of freeze exchanged for a constant lag.
+func (r *reveal) rate(p policy) float64 {
+	pending := float64(r.Pending())
+	if pending <= 0 {
+		return 0
+	}
+	reserve := p.reserve(&r.gaps, r.open)
+	if pending < reserve {
+		return p.base * pending / reserve
+	}
+	if p.catchup <= 0 {
+		return p.base
+	}
+	// Above the reserve, drain whatever is queued within catchup ticks. Without
+	// this the lag grows without bound: bytes arrive faster than a fixed clock
+	// plays them, and by the end of a long answer the display is minutes behind.
+	return math.Max(p.base, pending/float64(p.catchup))
+}
+
+// Open reports what the display is currently waiting on, for the status bar.
+func (r *reveal) Open() openState { return r.open }
+
+// Reserve is how many cells the policy is currently holding back, for the
+// status bar. It moves with the stream, so watching it is how the adaptation is
+// observed at all.
+func (r *reveal) Reserve(p policy) int { return int(p.reserve(&r.gaps, r.open)) }
 
 // View is the revealed output: every finished block, then the part of the
 // current one the head has reached.
@@ -175,6 +272,8 @@ func (r *reveal) resize(width int) {
 func (r *reveal) reset() {
 	r.source, r.frame = nil, nil
 	r.taken, r.cells, r.consumed, r.settled = 0, 0, 0, ""
+	r.gaps.reset()
+	r.open, r.credit = openState{}, 0
 }
 
 // cellsIn is the length of a rendered block in reveal steps: its visible width,

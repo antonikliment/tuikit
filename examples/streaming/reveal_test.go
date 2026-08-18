@@ -130,19 +130,126 @@ func TestRevealRerendersEveryBlockOnResize(t *testing.T) {
 	}
 }
 
-// Without this the lag grows without bound: bytes arrive faster than a fixed
-// clock plays them, and by the end of a long answer the display is minutes
-// behind what has already been received.
-func TestStepScalesWithTheBacklog(t *testing.T) {
-	r := newReveal(plain)
-	r.Feed(strings.Repeat("a settled paragraph\n\n", 200)+"tail", 40)
+// A policy for tests: one cell a tick, a one-second catch-up at the simulated
+// rate, and the reserve held at its estimated size.
+func held() policy { return policy{base: 1, catchup: simCPS, hold: 1} }
 
-	if got := r.Step(1, 100); got <= 1 {
-		t.Fatalf("Step = %d under a large backlog, want it above the base rate", got)
+// queue puts n cells of settled output in front of the head, with a settle
+// history that makes the estimated reserve predictable.
+func queue(t *testing.T, r *reveal, cells, gap int) {
+	t.Helper()
+	r.frame = append(r.frame, strings.Repeat("x", cells))
+	r.source = append(r.source, "x")
+	for range 3 {
+		for range gap {
+			r.gaps.Tick()
+		}
+		r.gaps.Settled()
 	}
-	r.Flush()
-	if got := r.Step(1, 100); got != 1 {
-		t.Fatalf("Step = %d with an empty queue, want the base rate", got)
+}
+
+// Below the reserve the drain scales with what is left, so the queue decays
+// toward empty rather than hitting it. This is the whole fix: a display that
+// keeps moving through a drought instead of freezing.
+func TestRateSlowsDownAsTheQueueEmpties(t *testing.T) {
+	r := newReveal(plain)
+	queue(t, r, 400, 200)
+
+	full := r.rate(held())
+	r.Advance(350)
+	nearlyEmpty := r.rate(held())
+
+	if nearlyEmpty >= full {
+		t.Fatalf("rate = %.3f with 50 cells left and %.3f with 400, want it to slow as the queue drains", nearlyEmpty, full)
+	}
+	if nearlyEmpty <= 0 {
+		t.Fatalf("rate = %.3f with cells still queued, want the display to keep moving", nearlyEmpty)
+	}
+}
+
+// The property that replaces the stall: with nothing new arriving, the queue
+// has to outlast a drought many times longer than it would have at full rate.
+func TestConservingOutlastsADroughtThatWouldHaveStalled(t *testing.T) {
+	conserving, eager := newReveal(plain), newReveal(plain)
+	for _, r := range []*reveal{conserving, eager} {
+		queue(t, r, 400, 200)
+	}
+
+	survived := func(r *reveal, p policy) int {
+		for tick := range 2000 {
+			if r.Stalled() {
+				return tick
+			}
+			r.Tick(p)
+		}
+		return 2000
+	}
+	no := held()
+	no.hold = 0
+
+	long, short := survived(conserving, held()), survived(eager, no)
+	if long <= short*2 {
+		t.Fatalf("conserving lasted %d ticks and eager %d, want the reserve to stretch much further", long, short)
+	}
+	if short >= 500 {
+		t.Fatalf("eager lasted %d ticks, want it to run the 400-cell queue dry quickly", short)
+	}
+}
+
+// hold=0 turns the reserve off entirely, which is how the before/after
+// comparison is taken in one binary.
+func TestHoldZeroRestoresTheEagerBehaviour(t *testing.T) {
+	r := newReveal(plain)
+	queue(t, r, 400, 200)
+
+	p := held()
+	p.hold = 0
+	if got := r.rate(p); got < p.base {
+		t.Fatalf("rate = %.3f with the reserve off, want at least the base rate %.3f", got, p.base)
+	}
+}
+
+// Above the reserve the backlog is drained rather than held, or the lag grows
+// without bound: bytes arrive faster than a fixed clock plays them.
+func TestRateCatchesUpOnALargeBacklog(t *testing.T) {
+	r := newReveal(plain)
+	queue(t, r, 100000, 10)
+
+	if got := r.rate(held()); got <= 1 {
+		t.Fatalf("rate = %.3f under a large backlog, want it above the base rate", got)
+	}
+}
+
+// The open construct does not decide *when* to buffer — the reserve is held
+// continuously — it decides how hard to brake. A fence has no predictable end,
+// so the same queue has to be spent more slowly inside one.
+func TestAFenceBrakesHarderThanProse(t *testing.T) {
+	r := newReveal(plain)
+	queue(t, r, 400, 200)
+
+	r.open = openState{kind: openParagraph}
+	prose := r.rate(held())
+	r.open = openState{kind: openFence, open: 300}
+	fence := r.rate(held())
+
+	if fence >= prose {
+		t.Fatalf("rate = %.3f inside a fence and %.3f in prose, want the fence to brake harder", fence, prose)
+	}
+}
+
+// Fractions have to carry: the policy runs well below one cell a tick while
+// conserving, and truncating each tick would round the rate to zero and stall
+// anyway.
+func TestTickCarriesFractionsOfACell(t *testing.T) {
+	r := newReveal(plain)
+	queue(t, r, 400, 4000) // a huge reserve, so the rate is far below one cell
+
+	before := r.Pending()
+	for range 200 {
+		r.Tick(held())
+	}
+	if r.Pending() >= before {
+		t.Fatalf("pending %d then %d after 200 ticks, want the display to have moved", before, r.Pending())
 	}
 }
 
@@ -190,14 +297,16 @@ func TestSliceCellsCountsLineBreaksAsCells(t *testing.T) {
 func TestRevealStallsWhileALongBlockIsStillArriving(t *testing.T) {
 	for _, block := range []int{3, 12} {
 		t.Run(fmt.Sprintf("block=%d", block), func(t *testing.T) {
-			stat := simulate(t, block)
+			stat := simulate(t, block, held())
 			if stat.stalled == 0 {
 				t.Fatal("no stall observed; the note's central objection to this mode may no longer hold")
 			}
 			// Backpressure has to hold the lag down, or the display finishes
-			// long after the stream does.
-			if stat.backlog > simCPS {
-				t.Fatalf("backlog %d cells at the end, want the catch-up rule to hold it under %d", stat.backlog, simCPS)
+			// long after the stream does. The reserve is deliberate latency and
+			// is allowed on top of it; the catch-up rule governs the rest.
+			if limit := stat.reserve + simCPS; stat.backlog > limit {
+				t.Fatalf("backlog %d cells at the end, want the catch-up rule to hold it under %d (reserve %d)",
+					stat.backlog, limit, stat.reserve)
 			}
 		})
 	}
@@ -212,6 +321,7 @@ const (
 type simStats struct {
 	stalled, worst, peak, backlog int
 	freezes                       int // stalls long enough to read as a freeze
+	reserve                       int // what the policy was holding back at the end
 }
 
 // visible is how long the display has to sit still before a stall stops being
@@ -220,7 +330,7 @@ const visible = 500 * time.Millisecond
 
 // simulate runs the reveal headlessly over a seeded stream, one character in
 // and one display tick out per step, which is what the demo does per frame.
-func simulate(t *testing.T, block int) simStats {
+func simulate(t *testing.T, block int, p policy) simStats {
 	t.Helper()
 
 	r := newReveal(markdown.New(tuikit.DefaultTheme()))
@@ -238,7 +348,7 @@ func simulate(t *testing.T, block int) simStats {
 		buffer, pending = buffer+pending[:1], pending[1:]
 
 		r.Feed(buffer, simWidth)
-		r.Advance(r.Step(1, simCPS)) // drain whatever is queued within a second
+		r.Tick(p)
 		stat.peak = max(stat.peak, r.Pending())
 
 		if r.Stalled() {
@@ -251,13 +361,13 @@ func simulate(t *testing.T, block int) simStats {
 			run = 0
 		}
 	}
-	stat.backlog = r.Pending()
+	stat.backlog, stat.reserve = r.Pending(), r.Reserve(p)
 
 	tick := time.Second / simCPS
-	t.Logf("%s of stream at %d cps: stalled %s (%d%%), %d freezes over %s, longest %s, peak backlog %d cells",
+	t.Logf("%s of stream at %d cps: stalled %s (%d%%), %d freezes over %s, longest %s, peak backlog %d cells, holding %d",
 		time.Duration(simTicks)*tick, simCPS,
 		time.Duration(stat.stalled)*tick, stat.stalled*100/simTicks,
 		stat.freezes, visible,
-		time.Duration(stat.worst)*tick, stat.peak)
+		time.Duration(stat.worst)*tick, stat.peak, stat.reserve)
 	return stat
 }
