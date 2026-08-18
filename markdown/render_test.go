@@ -122,3 +122,61 @@ func TestWithSyntaxThemeChangesHighlighting(t *testing.T) {
 		t.Fatalf("syntax theme changed the text, not just its color:\n%q\n%q", visible(dark), visible(light))
 	}
 }
+
+// The two things [tuikit.WithSpeculativeTail] claims, checked against the real
+// engine rather than against the closer-appending scan, which cannot know what
+// goldmark and chroma will do with its output.
+func TestSpeculativeTailRendersWhatTheRawTailShows(t *testing.T) {
+	render := New(tuikit.DefaultTheme())
+	raw := tuikit.NewStreamingMarkdown(render)
+	spec := tuikit.NewStreamingMarkdown(render, tuikit.WithSpeculativeTail())
+
+	// No raw markdown: an unfinished emphasis arrives styled, not as asterisks.
+	const emphasis = "Settled prose.\n\nA paragraph with **bo"
+	if got := raw.Render(emphasis, 50); !strings.Contains(got, "**bo") {
+		t.Errorf("the raw tail should show its markers: %q", got)
+	}
+	got := spec.Render(emphasis, 50)
+	if strings.Contains(got, "**") {
+		t.Errorf("markers left in the speculative tail: %q", got)
+	}
+	if !strings.HasSuffix(visible(got), "bo") {
+		t.Errorf("the text itself changed: %q", visible(got))
+	}
+
+	// The fence, which is the case the display clock cannot stream at all: an
+	// open fence needs no synthetic closer, because CommonMark ends it at the
+	// end of the document, so chroma lexes the partial body and it arrives
+	// highlighted rather than as plain text.
+	const fence = "Settled prose.\n\n```go\nfunc main() {\n"
+	rawFence := tuikit.NewStreamingMarkdown(render)
+	specFence := tuikit.NewStreamingMarkdown(render, tuikit.WithSpeculativeTail())
+	if got := rawFence.Render(fence, 50); strings.Contains(got, "\x1b[38") {
+		t.Errorf("the raw tail should not be highlighted: %q", got)
+	}
+	if got := specFence.Render(fence, 50); !strings.Contains(got, "\x1b[38") {
+		t.Errorf("the partial fence arrived unhighlighted: %q", got)
+	}
+}
+
+// What speculation costs: the tail is re-rendered through glamour on every
+// frame it changes, where the default only wraps it. The settled prefix is
+// cached in both, so this is the per-frame difference and nothing else.
+func BenchmarkRenderTail(b *testing.B) {
+	render := New(tuikit.DefaultTheme())
+	tail := strings.Repeat("Some **prose** with `code` in it. ", 6) + "and a **partial"
+	grow := func(i int) string { return "Settled prose.\n\n" + tail + strings.Repeat("x", i%7) }
+
+	b.Run("wrap", func(b *testing.B) {
+		s := tuikit.NewStreamingMarkdown(render)
+		for i := 0; b.Loop(); i++ {
+			s.Render(grow(i), 80)
+		}
+	})
+	b.Run("speculative", func(b *testing.B) {
+		s := tuikit.NewStreamingMarkdown(render, tuikit.WithSpeculativeTail())
+		for i := 0; b.Loop(); i++ {
+			s.Render(grow(i), 80)
+		}
+	})
+}

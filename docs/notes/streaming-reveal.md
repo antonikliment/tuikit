@@ -255,6 +255,64 @@ halves, and the reason is not the policy — underrun tracks the freeze almost
 exactly, meaning the queue is genuinely empty. There is no reserve to hold
 because nothing settled to put in one. A buffer cannot manufacture material.
 
+## Round three: closing the tail instead of pacing it
+
+The conclusion above names highlighting the partial fence as the one change
+that would settle this. It turns out to fall out of a more general fix, and the
+general fix is about forty lines.
+
+`mdspeculate.go` keeps a stack of the inline constructs the tail leaves open —
+emphasis, strong, strikethrough, code spans, link text, link destinations — and
+appends their closers in reverse before rendering it. Plain bracket matching,
+applied to markdown. `WithSpeculativeTail` turns it on. The closers are
+recomputed from scratch every frame and never touch the settled prefix, so a
+wrong guess is corrected within one frame and can never corrupt output that has
+already been shown. That is what licenses the scan to approximate CommonMark's
+inline rules rather than implement them: full fidelity needs delimiter-run
+flanking analysis, and the difference only appears in text that is about to be
+re-rendered anyway.
+
+Two details carry most of the value.
+
+**Fences are deliberately not on the stack.** CommonMark closes an open fence at
+the end of the document, so a partial fence is *already* a code block as far as
+goldmark is concerned, and chroma lexes what it has. Rendering the tail at all
+is therefore enough to make a fence stream highlighted; the synthetic ` ``` `
+would be a no-op. The construct the display clock cannot stream under any
+amount of buffering is the one this gets for free.
+
+**A trailing delimiter is dropped, not closed.** `a *` is far more likely to be
+the first character of `**` than an abandoned emphasis span, and closing it
+renders a literal `**` that flickers away next frame.
+
+### Measured
+
+`BenchmarkRenderTail`, tail of ~230 B at width 80, per frame:
+
+| | Per frame |
+| --- | --- |
+| wrap (default) | 3.2 µs |
+| speculative render | 129 µs |
+
+`BenchmarkCloseOpen` — the scan alone — is 1.5 µs, so essentially all of the
+difference is glamour rendering the tail. Forty times the cost, and still 0.13 ms
+against a 16 ms frame. It is opt-in anyway: this is a cost per frame rather than
+per block, and a host streaming into a small pane at a high frame rate should
+know it is paying it.
+
+### What it does and does not settle
+
+It removes the raw-markdown flash without a clock, without a buffer, without a
+knob, and without giving up the raw tail's one advantage — text on screen
+throughout a long fence. Reflow shrinks rather than vanishing: the tail now has
+its final inline shape, but a list item still gains its bullet and a table still
+gains its borders when the block settles, because those are block-level and the
+tail is still only a partial block.
+
+So the trade the whole note is about has moved. It is no longer "reflow versus a
+multi-second freeze" but "block-level reflow versus a multi-second freeze", and
+the freeze side has lost the argument it was winning.
+
 ## Conclusion
 
 Still do not put the clock in the kit, and do not make it the demo's default —
