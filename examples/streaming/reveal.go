@@ -248,7 +248,7 @@ func (r *reveal) View() string {
 	shown := make([]string, 0, r.taken+1)
 	shown = append(shown, r.frame[:r.taken]...)
 	if r.taken < len(r.frame) && r.cells > 0 {
-		shown = append(shown, sliceCells(r.frame[r.taken], r.cells))
+		shown = append(shown, sliceCells(r.frame[r.taken], snapToWord(r.frame[r.taken], r.cells)))
 	}
 	return strings.Join(shown, "\n\n")
 }
@@ -288,6 +288,53 @@ func cellsIn(frame string) int {
 		total += ansi.StringWidth(line)
 	}
 	return total
+}
+
+// longWord is how many cells the head may sit still waiting for a word to
+// finish. Beyond it the word is shown partially instead: a URL or a long code
+// token would otherwise hold the display motionless until all of it had
+// arrived, which is the failure this whole design exists to avoid, in
+// miniature.
+const longWord = 24
+
+// snapToWord rounds a cell count back to the end of the last whole word, so the
+// head never leaves half a word on screen. Vercel's AI SDK reaches the same
+// conclusion for its smoothStream transform, which releases on \S+\s+ rather
+// than per character: a word appearing at once reads as typing, whereas a word
+// assembling letter by letter reads as a machine.
+func snapToWord(frame string, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	if total := cellsIn(frame); n >= total {
+		return total
+	}
+
+	// best is the last offset that ended a word; from is where the word now in
+	// progress started, which is how a long one is told from an ordinary one.
+	best, from, cell := 0, 0, 0
+	for i, line := range strings.Split(frame, "\n") {
+		if i > 0 {
+			if cell++; cell > n {
+				return best
+			}
+			best, from = cell, cell // a line break ends a word too
+		}
+		for _, r := range ansi.Strip(line) {
+			if cell+ansi.StringWidth(string(r)) > n {
+				if cell-from >= longWord {
+					return n
+				}
+				return best
+			}
+			cell += ansi.StringWidth(string(r))
+			if r == ' ' {
+				best, from = cell, cell
+			}
+		}
+		best, from = cell, cell
+	}
+	return best
 }
 
 // sliceCells returns the first n cells of a rendered block. It cuts on cell

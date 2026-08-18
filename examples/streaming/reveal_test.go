@@ -371,3 +371,77 @@ func simulate(t *testing.T, block int, p policy) simStats {
 		time.Duration(stat.worst)*tick, stat.peak, stat.reserve)
 	return stat
 }
+
+// A word appearing at once reads as typing; a word assembling letter by letter
+// reads as a machine. The head therefore stops at word ends, not wherever the
+// cell budget happens to land.
+func TestSnapToWordStopsAtWholeWords(t *testing.T) {
+	const frame = "hello world again"
+	for n, want := range map[int]int{
+		0:  0,
+		3:  0,  // mid-"hello": nothing whole yet
+		6:  6,  // "hello " is whole
+		9:  6,  // mid-"world": back to the last whole word
+		12: 12, // "hello world " is whole
+		17: 17, // the whole line
+		40: 17, // past the end
+	} {
+		if got := snapToWord(frame, n); got != want {
+			t.Errorf("snapToWord(%d) = %d, want %d", n, got, want)
+		}
+	}
+}
+
+// A line break ends a word, so a block does not hold back a finished line
+// waiting for the first word of the next one.
+func TestSnapToWordStopsAtLineBreaks(t *testing.T) {
+	const frame = "first\nsecond"
+	if got, want := snapToWord(frame, 6), 6; got != want {
+		t.Fatalf("snapToWord(6) = %d, want %d — the break after \"first\"", got, want)
+	}
+}
+
+// A URL or a long code token is wider than the budget will ever be at first.
+// Withholding it would freeze the display until all of it arrived, which is the
+// failure this whole design exists to avoid.
+func TestSnapToWordShowsAWordWiderThanTheBudget(t *testing.T) {
+	const frame = "https://example.com/a/very/long/path/that/never/breaks"
+	if got, want := snapToWord(frame, 30), 30; got != want {
+		t.Fatalf("snapToWord(30) = %d, want %d — a partial long word beats nothing", got, want)
+	}
+	// Up to longWord cells the head still waits, so an ordinary word is never
+	// shown half-drawn.
+	if got, want := snapToWord(frame, 12), 0; got != want {
+		t.Fatalf("snapToWord(12) = %d, want %d — still within the wait a word is allowed", got, want)
+	}
+}
+
+// Snapping counts visible cells, so styling must not shift where a word ends.
+func TestSnapToWordIgnoresEscapeSequences(t *testing.T) {
+	plainFrame := "hello world"
+	styled := "\x1b[1mhello\x1b[0m world"
+	if got, want := snapToWord(styled, 9), snapToWord(plainFrame, 9); got != want {
+		t.Fatalf("snapToWord on styled text = %d, on plain = %d, want them equal", got, want)
+	}
+}
+
+// The two have to compose: what the head reveals is the slice at the snapped
+// offset, and it must still be a prefix of the finished block.
+func TestViewRevealsWholeWordsOfTheBlockInFlight(t *testing.T) {
+	r := newReveal(plain)
+	r.Feed("one two three four\n\ntail", 40)
+
+	full := plain("one two three four", 40)
+	for range cellsIn(full) + 2 {
+		r.Advance(1)
+		got := r.View()
+		if !strings.HasPrefix(full, got) {
+			t.Fatalf("View = %q, not a prefix of %q", got, full)
+		}
+		if trailing := strings.TrimSuffix(got, " "); got != full && trailing != "" &&
+			!strings.HasSuffix(got, " ") && !strings.HasPrefix(full[len(got):], " ") &&
+			len(got) > len(plain("", 40)) {
+			t.Fatalf("View = %q ends mid-word", got)
+		}
+	}
+}
