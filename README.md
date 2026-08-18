@@ -78,6 +78,13 @@ reflows, and closing it leaves the page exactly as it was:
   and toggles a search input on `/`. Matching is against each line's visible
   text (ANSI styling is stripped first), so colored lines still search cleanly.
   The log/reader viewport every terminal app rebuilds by hand.
+- **`StreamingMarkdown`** — markdown rendered while it is still arriving. Blocks
+  that have provably settled are formatted and cached; the unfinished tail is
+  wrapped verbatim and redrawn each frame, so a code fence streams as plain text
+  and snaps to highlighted the moment it closes, instead of the whole answer
+  popping into shape at the end. Takes a `RenderFunc`; `tuikit/markdown`
+  provides one backed by glamour, in a separate package so importing tuikit does
+  not pull in a markdown engine.
 - **`Overlay`** — a dismissable floating panel: a titled, bordered, scrollable
   box drawn *over* the host's view rather than stacked above or below it, for
   the reference output (a help table, a usage report) that otherwise has nowhere
@@ -139,6 +146,7 @@ tea.NewProgram(frame).Run()
 
 ```sh
 go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Meter/Status, Table/Pairs, Overlay
+go run ./examples/streaming -seed=7 -cps=80 -block=3 -debug   # StreamingMarkdown under an endless generated stream
 go run ./examples/themed  # live theme switching — press t to cycle palettes
 ```
 
