@@ -1,5 +1,10 @@
 # tuikit
 
+[![CI](https://github.com/antonikliment/tuikit/actions/workflows/ci.yml/badge.svg)](https://github.com/antonikliment/tuikit/actions/workflows/ci.yml)
+[![Security](https://github.com/antonikliment/tuikit/actions/workflows/security.yml/badge.svg)](https://github.com/antonikliment/tuikit/actions/workflows/security.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/antonikliment/tuikit.svg)](https://pkg.go.dev/github.com/antonikliment/tuikit)
+[![Go Report Card](https://goreportcard.com/badge/github.com/antonikliment/tuikit)](https://goreportcard.com/report/github.com/antonikliment/tuikit)
+
 A small, reusable [Bubble Tea](https://charm.land) frame kit: the structural
 chrome you rebuild in every terminal app — a numbered page wrapper with
 navigation, chip tabs, and bordered panels — decoupled from any one app and
