@@ -229,26 +229,17 @@ the default, so it was not kept.
 
 ### Watch it
 
-The same seed and rate recorded both ways, at chat-sized blocks. The recorder
-stamps a clock on every frame and keeps sampling while the screen is unchanged,
-because the thing being compared is how long the display stops moving — a still
-frame cannot show it, and a GIF that drops unchanged frames hides it.
-
-Round one, `-hold=0`: five freezes over half a second, the longest 2.0 s.
-
-![eager clock](../gifs/reveal-eager.gif)
-
-With the adaptive buffer, `-hold=1`: two freezes, the longest 0.8 s. The status
-bar shows the reserve it is holding to pay for that.
-
-![buffered clock](../gifs/reveal-buffered.gif)
+Both rounds are reproducible in one binary, at the same seed and rate:
 
 ```
-RECORD=reveal-eager    scripts/record.py docs/gifs/reveal-eager.gif    /tmp/eager.png \
-    -- ./streaming -seed=7 -cps=200 -block=3 -reveal -debug -hold=0
-RECORD=reveal-buffered scripts/record.py docs/gifs/reveal-buffered.gif /tmp/buffered.png \
-    -- ./streaming -seed=7 -cps=200 -block=3 -reveal -debug
+go run ./examples/streaming -seed=7 -cps=200 -block=3 -reveal -hold=0   # round one
+go run ./examples/streaming -seed=7 -cps=200 -block=3 -reveal           # round two
 ```
+
+Recordings of the pair were taken and read off; the numbers in the table above
+are what they showed. They are not kept in the repo — the clock is not the
+design that shipped, and two 2 MB GIFs of a rejected approach are not worth the
+clone.
 
 **It does not rescue the pathological case.** At `-block=12` the freeze only
 halves, and the reason is not the policy — underrun tracks the freeze almost
