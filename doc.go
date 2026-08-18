@@ -31,6 +31,10 @@
 //   - [Theme.TabStrip] — just the row of active/inactive tab chips.
 //   - [Theme.PanelStyle] and [Panel] — bordered panels with a focused state.
 //   - [SearchView] — a searchable viewport with follow-to-bottom behavior.
+//   - [StreamingMarkdown] — markdown formatted as it arrives, settled blocks
+//     rendered and the unfinished tail left raw. Pair it with a [RenderFunc];
+//     [github.com/antonikliment/tuikit/markdown] supplies a glamour-backed one,
+//     kept in its own package so the markdown stack stays optional.
 //   - [Overlay] — a dismissable modal popup composited over a finished view,
 //     pinnable to any of nine anchors via [Alignment].
 //   - [Theme.ActionRow] — a labelled row of selectable actions.

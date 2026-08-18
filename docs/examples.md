@@ -10,6 +10,7 @@ Copy-paste snippets for each piece of the kit. A full runnable program lives in
 - [Panels](#panels)
 - [A scrolling page (viewport)](#a-scrolling-page-viewport)
 - [Searchable, following text (SearchView)](#searchable-following-text-searchview)
+- [Markdown as it streams (StreamingMarkdown)](#markdown-as-it-streams-streamingmarkdown)
 - [A modal popup (Overlay)](#a-modal-popup-overlay)
 - [Action rows](#action-rows)
 - [Resource meters](#resource-meters)
@@ -208,6 +209,54 @@ func (p *logsPage) View(width, height int) string {
 	prompt := tuikit.Field("Search", p.search.InputView())
 	return lipgloss.JoinVertical(lipgloss.Left, pane, prompt)
 }
+```
+
+## Markdown as it streams (StreamingMarkdown)
+
+`StreamingMarkdown` formats markdown that has not finished arriving. Give it the
+whole buffer every frame; it renders the blocks that have provably settled,
+caches them, and renders the unsettled rest with its open constructs closed —
+`a **bold` is drawn bold rather than as asterisks. A partial code fence needs no
+such help: CommonMark ends an open fence at the end of the document, so it
+streams already highlighted. `WithRawTail` wraps the tail verbatim instead, for
+a host that would rather pay a wrap than a render every frame.
+
+The markdown engine is supplied rather than built in, so importing `tuikit` does
+not drag in goldmark and chroma. `tuikit/markdown` has a glamour-backed one:
+
+```go
+type answerPage struct {
+	theme    tuikit.Theme
+	streamer tuikit.StreamingMarkdown
+	buffer   string // grown by whatever feeds the stream
+}
+
+func newAnswerPage(theme tuikit.Theme) *answerPage {
+	return &answerPage{
+		theme:    theme,
+		streamer: tuikit.NewStreamingMarkdown(markdown.New(theme)),
+	}
+}
+
+func (p *answerPage) View(width, height int) string {
+	return p.streamer.Render(p.buffer, width)
+}
+```
+
+Fenced code is highlighted by chroma once its closing fence lands. Chroma ships
+named stylesheets rather than taking colors, so it cannot be driven from a
+`Theme` the way the rest of the styling is — pick one to match your palette:
+
+```go
+markdown.New(theme, markdown.WithSyntaxTheme("tokyonight-day"))
+```
+
+The result is unstyled text, so wrap it in a `lipgloss.Style` to color the
+portion that has not been formatted yet. `examples/streaming` drives it with an
+endless generated document and a `-debug` flag that marks the boundary:
+
+```console
+go run ./examples/streaming -seed=7 -cps=80 -block=3 -debug
 ```
 
 ## A modal popup (Overlay)

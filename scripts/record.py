@@ -12,8 +12,8 @@ terminal theme, and it is reproducible on any machine with Python.
         docs/gifs/table.gif docs/screenshots/6-table.png -- /tmp/tuikit-demo
     magick docs/gifs/table.gif -layers optimize -colors 96 docs/gifs/table.gif
 
-Keystrokes and timing come from SCRIPT below; retarget it to record another
-page. Run it from the repository root.
+Keystrokes and timing come from SCRIPTS below; RECORD=<name> picks one, and a
+new entry records another page. Run it from the repository root.
 """
 
 import fcntl
@@ -33,17 +33,46 @@ FONT_PATH = "/usr/share/fonts/TTF/JetBrainsMonoNerdFontMono-Regular.ttf"
 FONT_SIZE = 13
 PAD = 16
 FRAME_MS = 120
+QUIET_MS = 8  # gap in pty output that marks a repaint as finished
 BG = (13, 17, 23)
 FG = (200, 205, 212)
 
-# (delay before, keys to send, capture from here on)
-SCRIPT = [
-    (2.6, None, False),   # let the demo paint its first page
-    (0.0, "6", True),     # Table page
-    (2.4, " ", True),     # any key starts the simulated transfer
-    (7.0, None, True),
-]
-STILL_AT = 4.2  # seconds into the capture, bar part-way across
+# Named recordings: (delay before, keys to send, capture from here on) plus the
+# offset the still is taken at. Pick one with RECORD=<name>.
+SCRIPTS = {
+    "table": ([
+        (2.6, None, False),   # let the demo paint its first page
+        (0.0, "6", True),     # Table page
+        (2.4, " ", True),     # any key starts the simulated transfer
+        (7.0, None, True),
+    ], 4.2),                  # bar part-way across
+    "streaming": ([
+        (1.5, None, False),   # let the first blocks arrive
+        (26.0, None, True),   # the stream renders itself; no input needed
+    ], 22.5),                 # on a code fence, which is what the tail handling
+                              # is most visibly doing something about
+    # The two rounds of the display clock, same seed and rate, so the pair can
+    # be watched against each other. Both are stamped with a clock (see draw)
+    # because the thing being compared is *how long the screen stops moving*,
+    # which no still frame shows.
+    "reveal-eager": ([
+        (0.4, None, False),
+        (24.0, None, True),
+    ], 12.0),
+    "reveal-buffered": ([
+        (0.4, None, False),
+        (24.0, None, True),
+    ], 12.0),
+}
+RECORD = os.environ.get("RECORD", "table")
+SCRIPT, STILL_AT = SCRIPTS[RECORD]
+
+# A clocked recording stamps every frame with elapsed time and keeps sampling
+# while the screen is unchanged. Both are needed to record a *freeze*: a program
+# that has stopped drawing emits nothing, so the usual dirty-and-deduplicate
+# path would collapse the freeze into a single frame and the clock would appear
+# to stop with it.
+CLOCK = RECORD.startswith("reveal-")
 
 # pyte reports ANSI names; the rest arrive as bare hex.
 NAMED = {
@@ -82,13 +111,14 @@ def run(command):
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
 
     frames, start, capturing = [], time.time(), False
+    last, dirty = 0.0, False
     for delay, keys, capture in SCRIPT:
         if keys:
             os.write(fd, keys.encode())
         capturing = capturing or capture
         deadline = time.time() + delay
         while time.time() < deadline:
-            ready, _, _ = select.select([fd], [], [], FRAME_MS / 1000)
+            ready, _, _ = select.select([fd], [], [], QUIET_MS / 1000)
             if ready:
                 try:
                     data = os.read(fd, 65536)
@@ -97,8 +127,17 @@ def run(command):
                 if not data:
                     break
                 stream.feed(data)
-            if capturing:
-                frames.append((time.time() - start, snapshot(screen)))
+                dirty = True
+                continue
+            # The pty has gone quiet, so the last repaint is complete. Sampling
+            # while a write is still in flight catches the screen mid-escape-
+            # sequence and tears the frame — a program that repaints on every
+            # character is almost always mid-write. Waiting for the gap is what
+            # makes each captured frame a whole one.
+            now = time.time()
+            if capturing and (dirty or CLOCK) and now - last >= FRAME_MS / 1000:
+                last, dirty = now, False
+                frames.append((now - start, snapshot(screen)))
     os.write(fd, b"\x03")
     time.sleep(0.3)
     os.close(fd)
@@ -110,7 +149,7 @@ def snapshot(screen):
     return [[screen.buffer[y][x] for x in range(COLS)] for y in range(ROWS)]
 
 
-def draw(buffer, font, cell_w, cell_h):
+def draw(buffer, font, cell_w, cell_h, t=None):
     image = Image.new("RGB", (COLS * cell_w + 2 * PAD, ROWS * cell_h + 2 * PAD), BG)
     canvas = ImageDraw.Draw(image)
     for y, row in enumerate(buffer):
@@ -124,6 +163,14 @@ def draw(buffer, font, cell_w, cell_h):
             if char.data.strip():
                 fg = BG if char.reverse else color(char.fg, FG)
                 canvas.text((px, py), char.data, font=font, fill=fg)
+    if t is not None:
+        # A wall clock, drawn by the recorder rather than the program, so two
+        # recordings of different builds share one timebase.
+        label = f"{t:5.1f}s"
+        w = font.getlength(label)
+        canvas.rectangle([image.width - PAD - w - 8, 2, image.width, PAD + cell_h],
+                         fill=BG)
+        canvas.text((image.width - PAD - w, 4), label, font=font, fill=(120, 190, 255))
     return image
 
 
@@ -139,10 +186,10 @@ def main():
 
     images, times, previous = [], [], None
     for t, buffer in frames:
-        if buffer == previous:
+        if buffer == previous and not CLOCK:
             continue
         previous = buffer
-        images.append(draw(buffer, font, cell_w, cell_h))
+        images.append(draw(buffer, font, cell_w, cell_h, t - frames[0][0] if CLOCK else None))
         times.append(t)
     if not images:
         sys.exit("no frames captured")

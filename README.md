@@ -30,6 +30,22 @@ reflows, and closing it leaves the page exactly as it was:
 
 ![Overlay](docs/gifs/overlay.gif)
 
+`StreamingMarkdown`, from `go run ./examples/streaming`. A generated document
+arrives a character at a time; blocks that have settled are formatted and
+cached, and the unfinished tail is rendered too, with whatever constructs it
+leaves open closed synthetically. Watch a code fence arrive already
+chroma-highlighted, and no `**` or backticks ever reach the screen — the answer
+never sits unformatted waiting for the stream to end:
+
+![Streaming markdown](docs/gifs/streaming.gif)
+
+The same demo's `-reveal` flag runs a rejected alternative: settled blocks played
+out on a display clock so nothing unfinished is ever drawn, paced by an adaptive
+playout buffer that sizes itself from the observed gap between blocks. It removes
+the reflow and still freezes inside a long fence, which is why it stayed in the
+demo — measurements and the reasoning are in
+[docs/notes/streaming-reveal.md](docs/notes/streaming-reveal.md).
+
 <details>
 <summary>Static screenshots</summary>
 
@@ -45,9 +61,9 @@ reflows, and closing it leaves the page exactly as it was:
 | --- | --- |
 | ![Widgets page](docs/screenshots/5-widgets.png) | ![Table page](docs/screenshots/6-table.png) |
 
-| Overlay (modal popup, pinned right) |
-| --- |
-| ![Overlay page](docs/screenshots/7-overlay.png) |
+| Overlay (modal popup, pinned right) | Streaming markdown (boundary shown) |
+| --- | --- |
+| ![Overlay page](docs/screenshots/7-overlay.png) | ![Streaming page](docs/screenshots/streaming.png) |
 
 </details>
 
@@ -78,6 +94,14 @@ reflows, and closing it leaves the page exactly as it was:
   and toggles a search input on `/`. Matching is against each line's visible
   text (ANSI styling is stripped first), so colored lines still search cleanly.
   The log/reader viewport every terminal app rebuilds by hand.
+- **`StreamingMarkdown`** — markdown rendered while it is still arriving. Blocks
+  that have provably settled are formatted and cached; the unfinished tail is
+  redrawn each frame with its open constructs closed synthetically, so a partial
+  code fence streams *highlighted* and no raw markers are ever visible, instead
+  of the whole answer popping into shape at the end. `WithRawTail` opts out. Takes a `RenderFunc`; `tuikit/markdown`
+  provides one backed by glamour, in a separate package so importing tuikit does
+  not pull in a markdown engine. Fenced code is highlighted by chroma;
+  `markdown.WithSyntaxTheme` picks the stylesheet.
 - **`Overlay`** — a dismissable floating panel: a titled, bordered, scrollable
   box drawn *over* the host's view rather than stacked above or below it, for
   the reference output (a help table, a usage report) that otherwise has nowhere
@@ -139,6 +163,7 @@ tea.NewProgram(frame).Run()
 
 ```sh
 go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Meter/Status, Table/Pairs, Overlay
+go run ./examples/streaming -seed=7 -cps=80 -block=3 -debug   # StreamingMarkdown under an endless generated stream
 go run ./examples/themed  # live theme switching — press t to cycle palettes
 ```
 

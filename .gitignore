@@ -6,3 +6,8 @@
 # Go workspace
 go.work
 go.work.sum
+.claude/worktrees/
+
+# compiled examples, named after their directory
+/streaming
+/streamcompare
