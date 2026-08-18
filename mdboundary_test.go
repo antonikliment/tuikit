@@ -1,6 +1,7 @@
 package tuikit
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -96,5 +97,20 @@ func TestBoundaryOfAdvancesMonotonicallyWhileStreaming(t *testing.T) {
 			t.Fatalf("at %d bytes: cut went backwards, %d then %d", i, previous, cut)
 		}
 		previous = cut
+	}
+}
+
+// The scan runs once a frame on the whole buffer, so its cost has to stay
+// linear in the buffer: a component pointed at a long transcript or a tailed
+// file would otherwise slow down as the document grows.
+func BenchmarkBoundaryOf(b *testing.B) {
+	const block = "A paragraph that settles.\n\n```go\nfunc main() {}\n```\n\n- an item\n- another\n\n"
+	for _, blocks := range []int{16, 128, 1024} {
+		text := strings.Repeat(block, blocks)
+		b.Run(fmt.Sprintf("%dKB", len(text)/1024), func(b *testing.B) {
+			for b.Loop() {
+				boundaryOf(text)
+			}
+		})
 	}
 }
