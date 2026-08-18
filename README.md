@@ -40,9 +40,11 @@ to end:
 ![Streaming markdown](docs/gifs/streaming.gif)
 
 The same demo's `-reveal` flag runs a rejected alternative: settled blocks played
-out on a display clock so nothing unfinished is ever drawn. It removes the reflow
-and buys an eleven-second freeze inside a long fence — measurements and the
-reasoning are in [docs/notes/streaming-reveal.md](docs/notes/streaming-reveal.md).
+out on a display clock so nothing unfinished is ever drawn, paced by an adaptive
+playout buffer that sizes itself from the observed gap between blocks. It removes
+the reflow and still freezes inside a long fence, which is why it stayed in the
+demo — measurements and the reasoning are in
+[docs/notes/streaming-reveal.md](docs/notes/streaming-reveal.md).
 
 <details>
 <summary>Static screenshots</summary>

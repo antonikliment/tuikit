@@ -10,13 +10,19 @@
 //	go run ./examples/streaming -seed=7 -cps=400 -block=12   # long fences
 //
 // -reveal swaps the raw tail for the display clock prototyped in
-// docs/notes/streaming-reveal.md: settled blocks are played out a cell at a
+// docs/notes/streaming-reveal.md: settled blocks are played out a word at a
 // time and nothing unfinished is ever drawn. Run the same seed both ways to
-// compare them — the trade is reflow, which goes to zero, against a stall
+// compare them — the trade is reflow, which goes to zero, against a freeze
 // inside a long fence, which the status bar reports.
 //
+// -hold scales the reserve the display keeps unplayed to ride out that freeze.
+// It sizes itself from the observed gap between blocks, so the flag is here to
+// take the before/after in one binary rather than to be tuned: -hold=0 restores
+// the eager clock that freezes for eleven seconds.
+//
 //	go run ./examples/streaming -seed=7 -cps=80 -reveal -debug
-//	go run ./examples/streaming -seed=7 -cps=200 -block=12 -reveal   # watch it stall
+//	go run ./examples/streaming -seed=7 -cps=200 -block=12 -reveal -debug
+//	go run ./examples/streaming -seed=7 -cps=200 -block=12 -reveal -hold=0   # the freeze
 package main
 
 import (

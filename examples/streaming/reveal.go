@@ -234,6 +234,18 @@ func (r *reveal) rate(p policy) float64 {
 	return math.Max(p.base, pending/float64(p.catchup))
 }
 
+// head is where the reader's eye is: the block being played and how much of it
+// is actually on screen, after snapping. Two ticks with the same head drew the
+// same thing, which is what makes it the right thing to measure a freeze with —
+// while conserving, the policy moves the cell count by less than a cell a tick,
+// so counting ticks that advanced no cells would call a working display frozen.
+func (r *reveal) head() (int, int) {
+	if r.taken >= len(r.frame) {
+		return r.taken, 0
+	}
+	return r.taken, snapToWord(r.frame[r.taken], r.cells)
+}
+
 // Open reports what the display is currently waiting on, for the status bar.
 func (r *reveal) Open() openState { return r.open }
 

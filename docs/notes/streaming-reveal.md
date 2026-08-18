@@ -1,9 +1,11 @@
 # Revealing rendered markdown on a clock
 
-Status: **prototyped in the demo; not recommended for the kit.** The scan fix
-landed, the reveal clock was built behind `-reveal` in `examples/streaming`, and
-it measures worse than the raw tail on the case that matters. What follows is
-the original reasoning, then what the prototype actually showed.
+Status: **prototyped in the demo, with an adaptive playout buffer; still not
+recommended for the kit.** The scan fix landed, the reveal clock was built
+behind `-reveal` in `examples/streaming`, its freeze was measured, and an
+adaptive buffer was then built to close it. The buffer works on chat-sized
+documents and only halves the pathological case. What follows is the original
+reasoning, then what each round actually showed.
 
 ## Where this comes from
 
@@ -151,25 +153,112 @@ pause. A stall is not visible if the display has merely caught up for a few
 frames, which is why the table counts freezes over half a second separately —
 those are the ones a viewer reads as a hang.
 
+## Round two: an adaptive playout buffer
+
+The freeze above is a buffer underrun — a bursty producer feeding a
+constant-rate consumer — so the fix came from the two literatures that own that
+problem. Four commits, each reviewable on its own:
+
+1. **`classify`** — what the unsettled tail is inside: nothing, paragraph,
+   container, or fence. The distinction that matters is the fence, whose end
+   nothing bounds. Every streaming markdown parser surveyed (incremark,
+   semidown, mdstream, CommonMark Appendix A) keeps an equivalent open-block
+   stack; this is that stack flattened to the one question the policy asks.
+2. **`gapEstimator`** — RFC 3550's exponentially weighted mean and deviation,
+   with settle gaps as the samples. `Reserve() = mean + 4·deviation`. Gaps are
+   badly skewed — mostly short paragraphs, the occasional long fence — so the
+   mean alone is nowhere near the value that has to be covered.
+3. **The rate map** — buffer-based rate adaptation (Huang et al., SIGCOMM 2014):
+   steer off buffer occupancy alone, do not predict the producer. Two regions
+   rather than the paper's three, because its bottom region is a flat floor at
+   the lowest rate and a flat floor still drains to empty, which is the failure
+   being fixed. Below the reserve the drain is *proportional*, so the queue
+   decays toward empty rather than hitting it — the display keeps moving through
+   a drought. That is what adaptive VoIP playout does when it time-scales speech
+   instead of letting the buffer run dry; on a text display it costs nothing.
+4. **Word-boundary release** — the head snaps back to the last whole word, as
+   Vercel's AI SDK does in `smoothStream`. A word appearing at once reads as
+   typing; a word assembling letter by letter reads as a machine.
+
+### Where the open construct comes in, and where it does not
+
+The obvious shape — a small buffer until an opening marker is seen, then a long
+one until the closing marker — cannot work as stated, and the code deliberately
+does something else. A buffer grown in reaction to seeing a fence would have to
+be built out of bytes arriving *during* the fence, and nothing settles during a
+fence. That is the entire problem. A reserve can only be spent if it was already
+held.
+
+So the reserve is held continuously, and the open construct sets **how hard to
+brake**, not when to buffer: fence 3×, container 1.5×, prose 1×, with the
+reserve floored inside a fence at the wait so far, since the drought to date is
+the best lower bound on the drought remaining.
+
+### Measured
+
+Twenty seconds of seeded stream at 200 cps, from `TestRevealPacing`. A freeze is
+a run of ticks in which the *visible* head does not move — not a tick that
+advanced no cells, since a conserving policy deliberately moves the head by less
+than a cell a tick, and not an empty queue, which is reported separately as an
+underrun.
+
+| Blocks | `-hold` | Longest freeze | Freezes > 500 ms | Underrun | Lag held |
+| --- | --- | --- | --- | --- | --- |
+| 3 | 0 (off) | 1.83 s | 5 | 5.55 s | — |
+| 3 | 0.5 | 1.19 s | 1 | 1.29 s | 548 c |
+| 3 | **1** | **1.00 s** | **1** | **1.10 s** | 1096 c |
+| 3 | 2 | 0.62 s | 1 | 0.71 s | 2193 c |
+| 3 | 4 | 0.70 s | 1 | 0.11 s | 4386 c |
+| 3 | 8 | 1.06 s | 2 | 0.11 s | 8772 c |
+| 12 | 0 (off) | 11.74 s | 2 | 17.29 s | — |
+| 12 | **1** | **5.14 s** | **2** | 5.25 s | 697 c |
+| 12 | 8 | 2.61 s | 7 | 2.57 s | 5576 c |
+
+Two things to read off it.
+
+**It works on the realistic case.** At chat-sized blocks the longest freeze
+halves and the number of noticeable freezes goes from five to one, for about a
+second of steady-state lag.
+
+**The response is U-shaped.** Past `-hold=2` the freezes get *worse* again while
+the underrun keeps falling — the queue is no longer empty, the policy is simply
+braking so hard the head crawls. Too little reserve starves the display; too
+much throttles it. A rate floor was tried to flatten the right-hand side: it
+helps there and causes starvation where material is scarce, and does nothing at
+the default, so it was not kept.
+
+**It does not rescue the pathological case.** At `-block=12` the freeze only
+halves, and the reason is not the policy — underrun tracks the freeze almost
+exactly, meaning the queue is genuinely empty. There is no reserve to hold
+because nothing settled to put in one. A buffer cannot manufacture material.
+
 ## Conclusion
 
-Do not put the clock in the kit, and do not make it the demo's default. The
-trade is real but it is the wrong way round: it removes reflow, which is
-cosmetic and mostly invisible on prose, and buys a multi-second freeze on
-exactly the construct — a long fence — that the raw tail was built to handle.
+Still do not put the clock in the kit, and do not make it the demo's default —
+but the reasoning has moved.
 
-The prototype stays in the demo behind the flag. It is cheap to keep, it is the
-evidence for this conclusion, and it is where the escapes would be tried:
+The adaptive buffer is a real improvement and is the right structure: no
+user-facing knob (which is what sank glow's `--flow`, where the maintainer's
+objection was making the user pick a size), self-sizing from observed behaviour,
+and grounded in two literatures that have solved this exact shape. On a
+chat-sized answer it brings the display close to smooth.
 
-- **The fence fallback would rescue it.** Falling back to the raw tail inside an
-  open fence removes the `-block=12` case entirely, since fences are what
-  produce the long stalls. The cost is that the visuals change mode mid-answer
-  and both paths need maintaining.
-- **Highlighting the partial fence directly** is the version worth wanting. The
-  info string names the language, so chroma can lex a partial body without
-  goldmark. That is the only route to streaming *inside* a fence, and it would
-  improve the current design too, with or without a clock.
+What it does not do is make the clock better than the raw tail, because the
+remaining freeze is on long fences and no amount of buffering reaches it. The
+raw tail shows text throughout that same window. The trade is still reflow —
+cosmetic, mostly invisible on prose — against multi-second freezes on code.
 
-Neither is worth building for reflow alone. Revisit if the flash of raw markdown
-turns out to bother people in practice, which the demo can now answer either
-way.
+The one change that would settle it is the escape the first round already
+identified, now with a clearer reason to want it:
+
+- **Highlighting the partial fence directly.** The info string names the
+  language, so chroma can lex a partial body without goldmark. That is the only
+  route to streaming *inside* a fence, it removes the one case the buffer cannot
+  reach, and it would improve the raw-tail design too, with or without a clock.
+  If anything here graduates to the kit, it is this.
+- The cheaper fence fallback — raw tail inside an open fence — would also remove
+  the `-block=12` case, at the cost of the visuals changing mode mid-answer.
+
+Everything built here stays in the demo behind `-reveal` and `-hold`. It is
+cheap to keep, it is the evidence, and `-hold=0` reproduces the first round's
+numbers in the same binary.

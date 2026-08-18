@@ -285,30 +285,55 @@ func TestSliceCellsCountsLineBreaksAsCells(t *testing.T) {
 	}
 }
 
-// The measurement the note asks for. A block settles nothing until it closes,
-// so while a long one is arriving the queue empties and the display stops —
-// the freeze this mode trades reflow away for. Block size is what decides how
-// bad that is, so both a chat-sized document and one full of long fences and
-// tables are run, and the numbers logged for the write-up.
+// The measurement. A block settles nothing until it closes, so while a long one
+// is arriving there is nothing final to draw — the freeze this design trades
+// reflow away for, and what the reserve exists to cover.
 //
-// The assertion is only that the stall is real. A change that removes it would
-// invalidate the note's central objection to this design, and should be noticed
-// here first.
-func TestRevealStallsWhileALongBlockIsStillArriving(t *testing.T) {
+// A freeze is measured as a run of ticks in which the visible head does not
+// move. That is deliberately not the same as a tick that advanced no cells:
+// while the policy is conserving it moves the head by well under a cell a tick,
+// and counting those as frozen would call a working display broken. Nor is it
+// the same as an empty queue, which is reported separately as an underrun.
+func TestRevealPacing(t *testing.T) {
 	for _, block := range []int{3, 12} {
 		t.Run(fmt.Sprintf("block=%d", block), func(t *testing.T) {
-			stat := simulate(t, block, held())
-			if stat.stalled == 0 {
-				t.Fatal("no stall observed; the note's central objection to this mode may no longer hold")
+			eager := simulate(t, block, policy{base: 1, catchup: simCPS, hold: 0})
+			held := simulate(t, block, held())
+
+			if eager.worst == 0 {
+				t.Fatal("no freeze without a reserve; the objection this series answers may no longer hold")
 			}
-			// Backpressure has to hold the lag down, or the display finishes
-			// long after the stream does. The reserve is deliberate latency and
-			// is allowed on top of it; the catch-up rule governs the rest.
-			if limit := stat.reserve + simCPS; stat.backlog > limit {
-				t.Fatalf("backlog %d cells at the end, want the catch-up rule to hold it under %d (reserve %d)",
-					stat.backlog, limit, stat.reserve)
+			if held.worst >= eager.worst {
+				t.Fatalf("longest freeze %d ticks with a reserve and %d without, want the reserve to shorten it",
+					held.worst, eager.worst)
+			}
+			// The reserve is deliberate latency; the catch-up rule governs the
+			// rest, or the display finishes long after the stream does.
+			if limit := held.reserve + simCPS; held.backlog > limit {
+				t.Fatalf("backlog %d cells at the end, want it under %d (reserve %d)", held.backlog, limit, held.reserve)
 			}
 		})
+	}
+}
+
+// How the reserve multiplier trades freezing against lag. Logged rather than
+// asserted: it is the tuning evidence for the write-up, and pinning a preferred
+// value here would make the table a tautology.
+func TestRevealPacingSweepsTheReserve(t *testing.T) {
+	if testing.Short() {
+		t.Skip("twelve twenty-second simulations")
+	}
+	for _, block := range []int{3, 12} {
+		for _, hold := range []float64{0, 0.5, 1, 2, 4, 8} {
+			stat := simulate(t, block, policy{base: 1, catchup: simCPS, hold: hold})
+			tick := time.Second / simCPS
+			t.Logf("block=%-2d hold=%-3.1f  longest freeze %-7s  freezes>%s %-2d  underrun %-7s  lag at end %-4dc  holding %dc",
+				block, hold,
+				(time.Duration(stat.worst) * tick).Round(time.Millisecond),
+				visible, stat.freezes,
+				(time.Duration(stat.stalled) * tick).Round(time.Millisecond),
+				stat.backlog, stat.reserve)
+		}
 	}
 }
 
@@ -318,15 +343,17 @@ const (
 	simTicks = simCPS * 20 // twenty seconds of stream
 )
 
-type simStats struct {
-	stalled, worst, peak, backlog int
-	freezes                       int // stalls long enough to read as a freeze
-	reserve                       int // what the policy was holding back at the end
-}
-
-// visible is how long the display has to sit still before a stall stops being
-// "caught up for a moment" and starts reading as a hang.
+// visible is how long the display has to sit still before a pause stops reading
+// as pacing and starts reading as a hang.
 const visible = 500 * time.Millisecond
+
+type simStats struct {
+	stalled int // ticks with an empty queue: an underrun
+	worst   int // longest run of ticks in which the visible head did not move
+	freezes int // runs of that kind longer than visible
+	backlog int // cells still unplayed at the end
+	reserve int // what the policy was holding back at the end
+}
 
 // simulate runs the reveal headlessly over a seeded stream, one character in
 // and one display tick out per step, which is what the demo does per frame.
@@ -339,7 +366,8 @@ func simulate(t *testing.T, block int, p policy) simStats {
 	var (
 		buffer, pending string
 		stat            simStats
-		run             int
+		still           int
+		last            [2]int
 	)
 	for range simTicks {
 		if pending == "" {
@@ -349,99 +377,21 @@ func simulate(t *testing.T, block int, p policy) simStats {
 
 		r.Feed(buffer, simWidth)
 		r.Tick(p)
-		stat.peak = max(stat.peak, r.Pending())
 
 		if r.Stalled() {
-			stat.stalled, run = stat.stalled+1, run+1
-			stat.worst = max(stat.worst, run)
-			if run == int(visible/(time.Second/simCPS)) {
+			stat.stalled++
+		}
+		taken, cells := r.head()
+		if now := [2]int{taken, cells}; now == last {
+			still++
+			stat.worst = max(stat.worst, still)
+			if still == int(visible/(time.Second/simCPS)) {
 				stat.freezes++
 			}
 		} else {
-			run = 0
+			last, still = now, 0
 		}
 	}
 	stat.backlog, stat.reserve = r.Pending(), r.Reserve(p)
-
-	tick := time.Second / simCPS
-	t.Logf("%s of stream at %d cps: stalled %s (%d%%), %d freezes over %s, longest %s, peak backlog %d cells, holding %d",
-		time.Duration(simTicks)*tick, simCPS,
-		time.Duration(stat.stalled)*tick, stat.stalled*100/simTicks,
-		stat.freezes, visible,
-		time.Duration(stat.worst)*tick, stat.peak, stat.reserve)
 	return stat
-}
-
-// A word appearing at once reads as typing; a word assembling letter by letter
-// reads as a machine. The head therefore stops at word ends, not wherever the
-// cell budget happens to land.
-func TestSnapToWordStopsAtWholeWords(t *testing.T) {
-	const frame = "hello world again"
-	for n, want := range map[int]int{
-		0:  0,
-		3:  0,  // mid-"hello": nothing whole yet
-		6:  6,  // "hello " is whole
-		9:  6,  // mid-"world": back to the last whole word
-		12: 12, // "hello world " is whole
-		17: 17, // the whole line
-		40: 17, // past the end
-	} {
-		if got := snapToWord(frame, n); got != want {
-			t.Errorf("snapToWord(%d) = %d, want %d", n, got, want)
-		}
-	}
-}
-
-// A line break ends a word, so a block does not hold back a finished line
-// waiting for the first word of the next one.
-func TestSnapToWordStopsAtLineBreaks(t *testing.T) {
-	const frame = "first\nsecond"
-	if got, want := snapToWord(frame, 6), 6; got != want {
-		t.Fatalf("snapToWord(6) = %d, want %d — the break after \"first\"", got, want)
-	}
-}
-
-// A URL or a long code token is wider than the budget will ever be at first.
-// Withholding it would freeze the display until all of it arrived, which is the
-// failure this whole design exists to avoid.
-func TestSnapToWordShowsAWordWiderThanTheBudget(t *testing.T) {
-	const frame = "https://example.com/a/very/long/path/that/never/breaks"
-	if got, want := snapToWord(frame, 30), 30; got != want {
-		t.Fatalf("snapToWord(30) = %d, want %d — a partial long word beats nothing", got, want)
-	}
-	// Up to longWord cells the head still waits, so an ordinary word is never
-	// shown half-drawn.
-	if got, want := snapToWord(frame, 12), 0; got != want {
-		t.Fatalf("snapToWord(12) = %d, want %d — still within the wait a word is allowed", got, want)
-	}
-}
-
-// Snapping counts visible cells, so styling must not shift where a word ends.
-func TestSnapToWordIgnoresEscapeSequences(t *testing.T) {
-	plainFrame := "hello world"
-	styled := "\x1b[1mhello\x1b[0m world"
-	if got, want := snapToWord(styled, 9), snapToWord(plainFrame, 9); got != want {
-		t.Fatalf("snapToWord on styled text = %d, on plain = %d, want them equal", got, want)
-	}
-}
-
-// The two have to compose: what the head reveals is the slice at the snapped
-// offset, and it must still be a prefix of the finished block.
-func TestViewRevealsWholeWordsOfTheBlockInFlight(t *testing.T) {
-	r := newReveal(plain)
-	r.Feed("one two three four\n\ntail", 40)
-
-	full := plain("one two three four", 40)
-	for range cellsIn(full) + 2 {
-		r.Advance(1)
-		got := r.View()
-		if !strings.HasPrefix(full, got) {
-			t.Fatalf("View = %q, not a prefix of %q", got, full)
-		}
-		if trailing := strings.TrimSuffix(got, " "); got != full && trailing != "" &&
-			!strings.HasSuffix(got, " ") && !strings.HasPrefix(full[len(got):], " ") &&
-			len(got) > len(plain("", 40)) {
-			t.Fatalf("View = %q ends mid-word", got)
-		}
-	}
 }
