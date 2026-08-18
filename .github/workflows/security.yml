@@ -1,0 +1,182 @@
+name: Security
+
+# The gates CI deliberately does not carry: known vulnerabilities in
+# dependencies, static analysis of first-party code, leaked credentials, and
+# the trustworthiness of the CI workflows themselves.
+#
+# The weekly schedule is not redundant with the pull_request trigger. Every
+# check here can start failing without a commit — a CVE disclosed against a
+# dependency nobody touched is precisely the case a push-triggered job never
+# catches.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  govulncheck:
+    name: Go vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # govulncheck is a go.mod tool directive rather than a `go install`:
+      # `go install ...@latest` builds it with the Go version its own go.mod
+      # names, and a binary older than this module's toolchain cannot load
+      # these packages at all. The tool directive pins the version in go.sum
+      # and builds it with the toolchain go.mod already names.
+      #
+      # Reachability-based by design: it reports a vulnerability only when a
+      # vulnerable symbol is actually called, so a finding is actionable rather
+      # than a version-range match to triage away.
+      - name: govulncheck
+        run: go tool govulncheck ./...
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          languages: go
+          build-mode: manual
+
+      # After init, so the CodeQL tracer observes the compiler invocations.
+      - name: Build
+        run: go build ./...
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          category: /language:go
+
+  dependency-review:
+    name: Dependency review
+    # Only meaningful on a pull request: the action diffs the base ref's
+    # manifests against the head ref's. On push and on the weekly schedule
+    # there is no such pair, so the job is skipped rather than failed — the
+    # gate below treats a skipped job as acceptable.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Everything else here scans dependencies that are already merged.
+      # govulncheck reports a CVE in main after the fact; Dependabot opens a PR
+      # once one is disclosed. Neither stops a pull request from introducing a
+      # known-vulnerable package in the first place, which is what this does.
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Full history: a credential that was committed and then removed in a
+      # later commit is still published, and a shallow clone would not see it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # Installed from a pinned tag rather than run as a third-party action,
+      # which is how this repository already installs golangci-lint and keeps
+      # the set of actions it trusts small.
+      - name: Install gitleaks
+        env:
+          GOBIN: /usr/local/bin
+        run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
+
+      # --redact so a real finding does not get reprinted into a public log.
+      - name: gitleaks
+        run: gitleaks detect --source . --redact --no-banner
+
+  workflows:
+    name: Workflow audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # CI is itself an attack surface: release.yml holds contents: write and
+      # publishes releases. zizmor audits these workflows for the failure modes
+      # that matter here — spoofable actor checks, over-broad permissions,
+      # dangerous triggers, and unpinned third-party actions. Policy lives in
+      # .github/zizmor.yml.
+      - name: Install zizmor
+        run: pipx install zizmor==1.29.0
+
+      - name: zizmor
+        env:
+          # Enables the online audits (for example, flagging an action whose
+          # repository has been archived or renamed).
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor .github/workflows/
+
+  security:
+    # One stable check name for branch protection, so adding a job above never
+    # means editing a required-check list.
+    name: Security
+    needs: [govulncheck, codeql, dependency-review, secrets, workflows]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every security job to pass
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "security job results: $RESULTS"
+          for result in $RESULTS; do
+            # skipped is allowed only because dependency-review declares an
+            # event guard; no job above is skipped for any other reason, since
+            # none of them depend on another. A failure still reports failure,
+            # and a cancelled run is still not success.
+            if [ "$result" != success ] && [ "$result" != skipped ]; then
+              echo "a security job did not succeed" >&2
+              exit 1
+            fi
+          done
