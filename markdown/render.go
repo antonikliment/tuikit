@@ -28,6 +28,11 @@ import (
 // [WithSyntaxTheme]. The names come from chroma's styles package.
 const DefaultSyntaxTheme = "tokyonight-night"
 
+// SyntaxThemes lists the chroma stylesheet names [WithSyntaxTheme] accepts,
+// sorted. It is here so a host can offer a picker without taking a chroma
+// dependency of its own.
+func SyntaxThemes() []string { return styles.Names() }
+
 // Option configures the renderer.
 type Option func(*config)
 

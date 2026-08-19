@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -237,5 +238,40 @@ func TestWithStyleFuncRunsAfterThemeMapping(t *testing.T) {
 	}))(code, 40)
 	if themed == hooked {
 		t.Fatal("the hook did not override the theme's inline-code color")
+	}
+}
+
+// A host builds a theme picker from this list, so it has to be usable as one:
+// non-empty, sorted for display, and carrying the default it will start on.
+func TestSyntaxThemesIsUsableAsAPickerList(t *testing.T) {
+	names := SyntaxThemes()
+	if len(names) == 0 {
+		t.Fatal("SyntaxThemes returned nothing")
+	}
+	if !slices.IsSorted(names) {
+		t.Fatal("SyntaxThemes is not sorted")
+	}
+	if !slices.Contains(names, DefaultSyntaxTheme) {
+		t.Fatalf("SyntaxThemes omits DefaultSyntaxTheme %q", DefaultSyntaxTheme)
+	}
+}
+
+// The list would be worthless if the names in it were not the ones
+// WithSyntaxTheme honors — a picker offering names that silently fall back is
+// the bug this package just fixed, wearing a hat.
+func TestSyntaxThemesNamesAreHonored(t *testing.T) {
+	code := "```go\nfunc main() { return }\n```"
+	fallback := New(tuikit.DefaultTheme(), WithSyntaxTheme("no-such-style-exists"))(code, 60)
+	var honored int
+	for _, name := range SyntaxThemes() {
+		if New(tuikit.DefaultTheme(), WithSyntaxTheme(name))(code, 60) != fallback {
+			honored++
+		}
+	}
+	// Not every name can differ: DefaultSyntaxTheme is the fallback, and
+	// sibling stylesheets that vary only in background render alike. A clear
+	// majority proves the list and the option agree.
+	if want := len(SyntaxThemes()) / 2; honored < want {
+		t.Fatalf("only %d of %d listed themes changed the output", honored, len(SyntaxThemes()))
 	}
 }

@@ -170,6 +170,7 @@ tea.NewProgram(frame).Run()
 go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Meter/Status, Table/Pairs, Overlay
 go run ./examples/streaming -seed=7 -cps=80 -block=3 -debug   # StreamingMarkdown under an endless generated stream
 go run ./examples/themed  # live theme switching — press t to cycle palettes
+go run ./examples/syntax  # chroma stylesheets for fenced code — press tab to cycle
 ```
 
 Number keys switch pages; on the Panels page `Tab` switches sub-panels; on the
