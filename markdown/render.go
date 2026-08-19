@@ -18,6 +18,7 @@ import (
 
 	"charm.land/glamour/v2"
 	"charm.land/glamour/v2/ansi"
+	"github.com/alecthomas/chroma/v2/styles"
 )
 
 // DefaultSyntaxTheme is the chroma stylesheet fenced code is highlighted with
@@ -32,15 +33,26 @@ type Option func(*config)
 
 type config struct {
 	syntax  string
+	style   func(*ansi.StyleConfig)
 	glamour []glamour.TermRendererOption
 }
 
 // WithSyntaxTheme sets the chroma stylesheet used for fenced code, overriding
-// [DefaultSyntaxTheme]. An unknown name leaves code unhighlighted rather than
-// failing. Light palettes want a light stylesheet — "tokyonight-day",
-// "catppuccin-latte" and "github" are reasonable starts.
+// [DefaultSyntaxTheme]. An unknown name falls back to [DefaultSyntaxTheme]:
+// chroma's own fallback is "swapoff", which colors six token types and leaves
+// identifiers, operators and function names unstyled — a typo would render as
+// almost-but-not-quite gray code rather than as an error. Light palettes want a
+// light stylesheet — "tokyonight-day", "catppuccin-latte" and "github" are
+// reasonable starts.
 func WithSyntaxTheme(name string) Option {
 	return func(c *config) { c.syntax = name }
+}
+
+// WithStyleFunc adjusts the stylesheet after the theme has been mapped onto it,
+// for the elements a [tuikit.Theme] has no opinion about — a base text color, an
+// inline-code background, a colored blockquote rule.
+func WithStyleFunc(f func(*ansi.StyleConfig)) Option {
+	return func(c *config) { c.style = f }
 }
 
 // WithGlamour passes options straight through to glamour, for anything this
@@ -57,12 +69,23 @@ func WithGlamour(opts ...glamour.TermRendererOption) Option {
 //
 // Rendering failures fall back to the input text: an answer that cannot be
 // styled must still be readable.
+//
+// theme is captured here. A program whose theme changes at runtime needs a new
+// render function, since the cached renderers are keyed on width alone.
 func New(theme tuikit.Theme, opts ...Option) tuikit.RenderFunc {
 	cfg := config{syntax: DefaultSyntaxTheme}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+	// chroma resolves an unknown stylesheet to its own near-monochrome
+	// fallback, so an unrecognized name is corrected rather than passed on.
+	if _, ok := styles.Registry[cfg.syntax]; !ok {
+		cfg.syntax = DefaultSyntaxTheme
+	}
 	style := styleFor(theme, cfg.syntax)
+	if cfg.style != nil {
+		cfg.style(&style)
+	}
 	var mu sync.Mutex
 	renderers := map[int]*glamour.TermRenderer{}
 

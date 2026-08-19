@@ -66,6 +66,11 @@ func WithRawTail() StreamingOption {
 
 // RenderFunc renders complete markdown at a wrap width. It is only ever called
 // with whole blocks, never with a partial one.
+//
+// Its result carries the renderer's own SGR sequences. Do not wrap that result
+// in a [lipgloss.Style] carrying a foreground: lipgloss re-asserts its color
+// after every embedded reset, repainting each token the renderer colored. A
+// base color belongs inside the render function, not around its output.
 type RenderFunc func(text string, width int) string
 
 // NewStreamingMarkdown returns a StreamingMarkdown that formats settled blocks
@@ -85,8 +90,8 @@ func NewStreamingMarkdown(render RenderFunc, opts ...StreamingOption) StreamingM
 // it between calls, and size is an argument rather than state, matching the
 // rest of the kit.
 //
-// The result carries no styling of its own; wrap it in a [lipgloss.Style] to
-// color it.
+// The result carries no styling of its own, but the render function's does —
+// see [RenderFunc] before wrapping the result in a style.
 //
 // Block-level reflow survives either way: the tail is still a partial block, so
 // a list gains its bullet and a table its borders when the block settles. What
