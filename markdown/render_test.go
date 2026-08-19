@@ -1,16 +1,18 @@
 package markdown
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/antonikliment/tuikit"
 
-	"github.com/charmbracelet/x/ansi"
+	"charm.land/glamour/v2/ansi"
+	xansi "github.com/charmbracelet/x/ansi"
 )
 
 // Rendered output carries ANSI styling, so assertions compare the visible text.
-func visible(s string) string { return strings.TrimSpace(ansi.Strip(s)) }
+func visible(s string) string { return strings.TrimSpace(xansi.Strip(s)) }
 
 func TestNewRendersMarkdownStructure(t *testing.T) {
 	render := New(tuikit.DefaultTheme())
@@ -31,8 +33,8 @@ func TestNewRendersMarkdownStructure(t *testing.T) {
 func TestNewTrimsGlamourPadding(t *testing.T) {
 	got := New(tuikit.DefaultTheme())("Short line.", 60)
 	for _, line := range strings.Split(got, "\n") {
-		if strings.HasSuffix(ansi.Strip(line), " ") {
-			t.Fatalf("line %q keeps trailing padding", ansi.Strip(line))
+		if strings.HasSuffix(xansi.Strip(line), " ") {
+			t.Fatalf("line %q keeps trailing padding", xansi.Strip(line))
 		}
 	}
 	if strings.HasPrefix(got, "\n") || strings.HasSuffix(got, "\n") {
@@ -179,4 +181,97 @@ func BenchmarkRenderTail(b *testing.B) {
 			s.Render(grow(i), 80)
 		}
 	})
+}
+
+// The bug this validation exists for. A typo in a stylesheet name — "tokyo-night"
+// for "tokyonight-night" — used to reach chroma, which resolves an unknown name
+// to "swapoff": a style that colors six token types and leaves identifiers,
+// operators and function names unstyled. Code rendered as near-uniform gray, and
+// nothing reported a problem.
+func TestWithSyntaxThemeFallsBackOnUnknownName(t *testing.T) {
+	code := "```go\nfunc main() { return }\n```"
+	want := New(tuikit.DefaultTheme())(code, 60)
+	for name, unknown := range map[string]string{
+		"a plausible typo": "tokyo-night",
+		"nonsense":         "no-such-style-exists",
+		"empty":            "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := New(tuikit.DefaultTheme(), WithSyntaxTheme(unknown))(code, 60); got != want {
+				t.Fatalf("WithSyntaxTheme(%q) did not fall back to DefaultSyntaxTheme", unknown)
+			}
+		})
+	}
+}
+
+// Guards the fallback against quietly becoming chroma's own, which is what the
+// gray looked like.
+func TestWithSyntaxThemeFallbackIsNotChromas(t *testing.T) {
+	code := "```go\nfunc main() { return }\n```"
+	got := New(tuikit.DefaultTheme(), WithSyntaxTheme("no-such-style-exists"))(code, 60)
+	if swapoff := New(tuikit.DefaultTheme(), WithSyntaxTheme("swapoff"))(code, 60); got == swapoff {
+		t.Fatal("an unknown name still resolves to chroma's swapoff fallback")
+	}
+}
+
+// The hook exists so a host can set what a tuikit.Theme has no opinion about
+// without forking styleFor.
+func TestWithStyleFuncOverridesThemeMapping(t *testing.T) {
+	render := New(tuikit.DefaultTheme(), WithStyleFunc(func(s *ansi.StyleConfig) {
+		s.Document.Color = ptr("#ff00ff")
+	}))
+	got := render("Plain prose.", 40)
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("render = %q, want the hook's color applied", got)
+	}
+	if visible(got) != "Plain prose." {
+		t.Fatalf("the hook changed the text: %q", visible(got))
+	}
+}
+
+// Ordering is the whole point: the hook runs after the theme mapping, so it wins.
+func TestWithStyleFuncRunsAfterThemeMapping(t *testing.T) {
+	code := "`inline`"
+	themed := New(tuikit.DefaultTheme())(code, 40)
+	hooked := New(tuikit.DefaultTheme(), WithStyleFunc(func(s *ansi.StyleConfig) {
+		s.Code.Color = ptr("#ff00ff")
+	}))(code, 40)
+	if themed == hooked {
+		t.Fatal("the hook did not override the theme's inline-code color")
+	}
+}
+
+// A host builds a theme picker from this list, so it has to be usable as one:
+// non-empty, sorted for display, and carrying the default it will start on.
+func TestSyntaxThemesIsUsableAsAPickerList(t *testing.T) {
+	names := SyntaxThemes()
+	if len(names) == 0 {
+		t.Fatal("SyntaxThemes returned nothing")
+	}
+	if !slices.IsSorted(names) {
+		t.Fatal("SyntaxThemes is not sorted")
+	}
+	if !slices.Contains(names, DefaultSyntaxTheme) {
+		t.Fatalf("SyntaxThemes omits DefaultSyntaxTheme %q", DefaultSyntaxTheme)
+	}
+}
+
+// The list would be worthless if the names in it were not the ones
+// WithSyntaxTheme honors — a picker offering names that silently fall back is
+// the bug this package just fixed, wearing a hat.
+func TestSyntaxThemesNamesAreHonored(t *testing.T) {
+	code := "```go\nfunc main() { return }\n```"
+	fallback := New(tuikit.DefaultTheme(), WithSyntaxTheme("no-such-style-exists"))(code, 60)
+	var honored int
+	for _, name := range SyntaxThemes() {
+		if New(tuikit.DefaultTheme(), WithSyntaxTheme(name))(code, 60) != fallback {
+			honored++
+		}
+	}
+	// Not every name can differ: DefaultSyntaxTheme is the fallback, and
+	// sibling stylesheets that vary only in background render alike. A clear
+	// majority proves the list and the option agree.
+	if want := len(SyntaxThemes()) / 2; honored < want {
+		t.Fatalf("only %d of %d listed themes changed the output", honored, len(SyntaxThemes()))
+	}
 }
