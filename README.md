@@ -51,6 +51,18 @@ the reflow and still freezes inside a long fence, which is why it stayed in the
 demo — measurements and the reasoning are in
 [docs/notes/streaming-reveal.md](docs/notes/streaming-reveal.md).
 
+Fenced code is highlighted by chroma, and which stylesheet it uses is a choice —
+`markdown.SyntaxThemes` lists the 64 that ship, so an app can offer them. From
+`go run ./examples/syntax`, cycling three of them with `tab`. The light one is in
+the cycle to show what a stylesheet mismatched to the terminal looks like:
+
+![Syntax stylesheets](docs/gifs/syntax.gif)
+
+Switching means building a new render function — `markdown.New` captures the
+stylesheet — and a new `StreamingMarkdown`, whose cache is keyed on source and
+width alone and would otherwise keep serving the previous palette for blocks
+whose source never changes again.
+
 <details>
 <summary>Static screenshots</summary>
 
@@ -69,6 +81,10 @@ demo — measurements and the reasoning are in
 | Overlay (modal popup, pinned right) | Streaming markdown (boundary shown) |
 | --- | --- |
 | ![Overlay page](docs/screenshots/7-overlay.png) | ![Streaming page](docs/screenshots/streaming.png) |
+
+| Syntax stylesheets (catppuccin-mocha) | |
+| --- | --- |
+| ![Syntax page](docs/screenshots/syntax.png) | |
 
 </details>
 

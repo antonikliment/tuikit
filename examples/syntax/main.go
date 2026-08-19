@@ -24,8 +24,10 @@ import (
 	"github.com/antonikliment/tuikit/markdown"
 )
 
-// Three stylesheets that differ enough to tell apart at a glance: the dark
-// default, a light one, and a third with a distinctly different accent.
+// Three stylesheets that differ enough to tell apart at a glance. The light one
+// is here on purpose: on a dark terminal it comes out dim and low-contrast,
+// which is what a stylesheet mismatched to the palette looks like, and why
+// WithSyntaxTheme exists at all.
 var themes = []string{markdown.DefaultSyntaxTheme, "tokyonight-day", "catppuccin-mocha"}
 
 const sample = "# Syntax themes\n\n" +

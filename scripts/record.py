@@ -63,6 +63,15 @@ SCRIPTS = {
         (0.4, None, False),
         (24.0, None, True),
     ], 12.0),
+    # Three chroma stylesheets, tab between them. Held long enough on each to
+    # read the code, since the whole subject is which tokens changed color.
+    "syntax": ([
+        (1.5, None, False),   # first paint
+        (2.6, None, True),    # tokyonight-night
+        (2.6, "\t", True),    # tokyonight-day
+        (2.6, "\t", True),    # catppuccin-mocha
+        (1.8, "\t", True),    # back to the start
+    ], 6.5),                  # the light stylesheet, most obviously different
 }
 RECORD = os.environ.get("RECORD", "table")
 SCRIPT, STILL_AT = SCRIPTS[RECORD]
