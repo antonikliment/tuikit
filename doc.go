@@ -38,6 +38,8 @@
 //   - [Overlay] — a dismissable modal popup composited over a finished view,
 //     pinnable to any of nine anchors via [Alignment].
 //   - [Theme.ActionRow] — a labelled row of selectable actions.
+//   - [Selection] and [Cell] — a mouse drag over a rendered frame, painted
+//     with a highlight and copied out as plain text.
 //   - [Help] and [HelpLine] — bright full and one-line keyboard help.
 //   - [Meter] — a fixed-width resource gauge over bubbles/progress.
 //   - [Status] — a press-again-to-confirm flow with a result message.

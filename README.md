@@ -35,6 +35,13 @@ reflows, and closing it leaves the page exactly as it was:
 
 ![Overlay](docs/gifs/overlay.gif)
 
+`Selection`, from `go run ./examples/selection`. Capturing the mouse takes drag
+events away from the terminal, and its own text selection with them — so the app
+draws one. Dragging paints the range in place and releasing copies it, echoed in
+the footer:
+
+![Selection](docs/gifs/selection.gif)
+
 `StreamingMarkdown`, from `go run ./examples/streaming`. A generated document
 arrives a character at a time; blocks that have settled are formatted and
 cached, and the unfinished tail is rendered too, with whatever constructs it
@@ -123,6 +130,13 @@ whose source never changes again.
   provides one backed by glamour, in a separate package so importing tuikit does
   not pull in a markdown engine. Fenced code is highlighted by chroma;
   `markdown.WithSyntaxTheme` picks the stylesheet.
+- **`Selection`** — a mouse drag over a rendered frame. It holds two `Cell`s
+  and nothing else: the frame is handed to `Paint` and `Text` on every call, so
+  a selection cannot go stale against content re-rendered underneath it. `Paint`
+  highlights the range in place and keeps every line's display width; `Text`
+  returns what a copy gesture should put on the clipboard. Columns are display
+  columns throughout, so wide runes and styled cells land where they look like
+  they land.
 - **`Overlay`** — a dismissable floating panel: a titled, bordered, scrollable
   box drawn *over* the host's view rather than stacked above or below it, for
   the reference output (a help table, a usage report) that otherwise has nowhere
@@ -187,6 +201,7 @@ go run ./examples/demo    # pages, tabs, reader, SearchView, ActionRow, Help, Me
 go run ./examples/streaming -seed=7 -cps=80 -block=3 -debug   # StreamingMarkdown under an endless generated stream
 go run ./examples/themed  # live theme switching — press t to cycle palettes
 go run ./examples/syntax  # chroma stylesheets for fenced code — press tab to cycle
+go run ./examples/selection # drag to select and copy, painted by the app
 ```
 
 Number keys switch pages; on the Panels page `Tab` switches sub-panels; on the

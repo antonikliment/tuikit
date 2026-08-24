@@ -65,6 +65,19 @@ SCRIPTS = {
     ], 12.0),
     # Three chroma stylesheets, tab between them. Held long enough on each to
     # read the code, since the whole subject is which tokens changed color.
+    # A mouse drag, sent as SGR sequences straight into the pty: press at
+    # (col;row), three motions with the button held (button code +32), then
+    # release. The app paints the highlight, so the recording shows exactly what
+    # a viewer would see.
+    "selection": ([
+        (1.4, None, False),                  # first paint
+        (0.7, "\x1b[<0;10;5M", True),        # press, mid-sentence
+        (0.5, "\x1b[<32;57;5M", True),       # drag to the end of the line
+        (0.5, "\x1b[<32;44;6M", True),       # and down one
+        (0.9, "\x1b[<32;31;7M", True),       # and down another
+        (1.6, "\x1b[<0;31;7m", True),        # release: the footer echoes the copy
+        (1.2, None, True),
+    ], 2.6),                                 # mid-drag, two lines in
     "syntax": ([
         (1.5, None, False),   # first paint
         (2.6, None, True),    # tokyonight-night
