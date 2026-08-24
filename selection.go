@@ -18,6 +18,12 @@ type Cell struct{ Row, Col int }
 // [Selection.Text] each time, so a selection never goes stale against content
 // that has been re-rendered underneath it.
 //
+// Selection is linear, the way a text editor and a terminal are: the first row
+// runs from the anchor to the end of the line, whole rows follow, and the last
+// row ends at the cursor. That is right for a transcript and wrong for a frame
+// laid out in columns, where a drag inside one panel still picks up the panels
+// beside it — see issue #18 for block and region-aware modes.
+//
 // The zero value is an empty selection, ready to use.
 type Selection struct {
 	anchor Cell
