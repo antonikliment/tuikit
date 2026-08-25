@@ -259,3 +259,75 @@ func TestTabsAreExpanded(t *testing.T) {
 		t.Fatalf("output kept a tab: %q", got)
 	}
 }
+
+// The left cell must be exactly the column width however long its line is, or
+// the center gutter bends on the rows that hit the truncation cap.
+func TestSplitGutterStaysAlignedOnLongLeftLines(t *testing.T) {
+	long := "func aVeryLongFunctionNameThatKeepsGoingAndGoingAndGoingOnwards(x int) string {\n"
+	got := NewDiffView(DefaultTheme()).Painter(Plain).Highlighter(nil).
+		Before("a.go", long+"one\n").After("a.go", "func b() {}\none\n").
+		RenderSplit(100)
+	column := -1
+	for _, line := range strings.Split(got, "\n") {
+		i := strings.Index(line, splitGutter)
+		if i < 0 {
+			continue
+		}
+		width := lipgloss.Width(line[:i])
+		if column == -1 {
+			column = width
+		}
+		if width != column {
+			t.Fatalf("gutter at column %d, want %d, in %q:\n%s", width, column, line, got)
+		}
+	}
+	if column == -1 {
+		t.Fatal("no split rows rendered")
+	}
+}
+
+// An unknown stylesheet falls back to [DefaultDiffSyntaxTheme], not to chroma's
+// own near-monochrome fallback — styles.Get resolves unknown names itself, so
+// the nil check it never fails is not the guard.
+func TestChromaHighlighterUnknownStyleMatchesTheDefault(t *testing.T) {
+	code := "func main() {}"
+	got := ChromaHighlighter("no-such-style")("main.go", code)
+	want := ChromaHighlighter(DefaultDiffSyntaxTheme)("main.go", code)
+	if got != want {
+		t.Fatalf("unknown style = %q, want the default theme's %q", got, want)
+	}
+}
+
+// Setters called with the value they already hold must keep the memo: a view
+// function that threads MaxLines or ContextLines through every frame would
+// otherwise re-diff and re-highlight on every repaint.
+func TestUnchangedSettersKeepTheCache(t *testing.T) {
+	calls := 0
+	d := plainDiff().Highlighter(countingHighlight(&calls))
+	d.MaxLines(6).ContextLines(3).Render(80)
+	before := calls
+	d.MaxLines(6).ContextLines(3).
+		Before("greet.go", diffBefore).After("greet.go", diffAfter).
+		Render(80)
+	if calls != before {
+		t.Fatalf("unchanged setters re-rendered: highlighter ran %d more times, want 0", calls-before)
+	}
+}
+
+// Tab stops are display columns: a wide rune before a tab must not shift them.
+func TestTabStopsCountDisplayColumns(t *testing.T) {
+	if got, want := expandTabs("界\tx"), "界  x"; got != want {
+		t.Fatalf("expandTabs = %q, want %q", got, want)
+	}
+	if got, want := expandTabs("é\tx"), "é   x"; got != want {
+		t.Fatalf("expandTabs = %q, want %q", got, want)
+	}
+}
+
+func TestMaxLinesTailIsSingularForOneHiddenLine(t *testing.T) {
+	full := strings.Count(plainDiff().Render(80), "\n") + 1
+	got := plainDiff().MaxLines(full - 1).Render(80)
+	if !strings.HasSuffix(got, "… +1 more line") {
+		t.Fatalf("tail = %q, want a singular line", got[strings.LastIndex(got, "\n")+1:])
+	}
+}
