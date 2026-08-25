@@ -1,0 +1,7 @@
+--- greet.go
++++ greet.go
+@@ -2,10 +2,13 @@
+ 2  2
+ 3  3   import "fmt"
+ 4  4
+… +13 more lines

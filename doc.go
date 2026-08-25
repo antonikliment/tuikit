@@ -35,6 +35,9 @@
 //     rendered and the unfinished tail left raw. Pair it with a [RenderFunc];
 //     [github.com/antonikliment/tuikit/markdown] supplies a glamour-backed one,
 //     kept in its own package so the markdown stack stays optional.
+//   - [DiffView] — a diff between two versions of a file, unified or
+//     side-by-side, syntax-highlighted by chroma with the changed words inside
+//     a modified line pair picked out.
 //   - [Overlay] — a dismissable modal popup composited over a finished view,
 //     pinnable to any of nine anchors via [Alignment].
 //   - [Theme.ActionRow] — a labelled row of selectable actions.

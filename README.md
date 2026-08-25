@@ -58,6 +58,15 @@ the reflow and still freezes inside a long fence, which is why it stayed in the
 demo — measurements and the reasoning are in
 [docs/notes/streaming-reveal.md](docs/notes/streaming-reveal.md).
 
+`DiffView`, from `go run ./examples/diffview`. A file edit rendered unified or
+side-by-side, line-numbered on both sides, highlighted by chroma, and — this is
+the part a plain `+`/`-` diff leaves to the reader — with the changed words
+inside a modified line pair picked out, so a renamed identifier is visible
+rather than hidden in an otherwise identical line. `tab` switches layouts; below
+100 columns the side-by-side layout falls back to unified rather than truncating
+both halves. Diffing and highlighting are memoized per width and layout, since a
+static diff should not be recomputed every frame.
+
 Fenced code is highlighted by chroma, and which stylesheet it uses is a choice —
 `markdown.SyntaxThemes` lists the 64 that ship, so an app can offer them. From
 `go run ./examples/syntax`, cycling three of them with `tab`. The light one is in

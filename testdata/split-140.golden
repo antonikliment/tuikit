@@ -1,0 +1,16 @@
+--- greet.go
++++ greet.go
+@@ -2,10 +2,13 @@
+ 2                                                                   │  2
+ 3   import "fmt"                                                    │  3   import "fmt"
+ 4                                                                   │  4
+ 5 - func greet(name string) string {                                │  5 + func greet(name string, times int) string {
+ 6 -     return "hello, " + name                                     │  6 +     if times > 1 {
+                                                                     │  7 +         return fmt.Sprintf("hello, %s x%d", name, times)
+                                                                     │  8 +     }
+                                                                     │  9 +     return "hi, " + name
+ 7   }                                                               │ 10   }
+ 8                                                                   │ 11
+ 9   func main() {                                                   │ 12   func main() {
+10 -     fmt.Println(greet("world"))                                 │ 13 +     fmt.Println(greet("world", 2))
+11   }                                                               │ 14   }

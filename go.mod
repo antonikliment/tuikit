@@ -10,6 +10,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/term v0.2.2
+	github.com/sergi/go-diff v1.4.0
 )
 
 require (

@@ -85,6 +85,16 @@ SCRIPTS = {
         (2.6, "\t", True),    # catppuccin-mocha
         (1.8, "\t", True),    # back to the start
     ], 6.5),                  # the light stylesheet, most obviously different
+    # One edit rendered both ways. Held long enough on each layout to read the
+    # modified pairs, since the intraline emphasis is the subject; the last beat
+    # widens the context to show the hunk growing.
+    "diffview": ([
+        (1.6, None, False),   # first paint, unified
+        (3.4, "\t", True),    # unified, then switch
+        (3.6, "\t", True),    # side-by-side, then back
+        (2.2, "+", True),     # one more line of context
+        (1.8, None, True),
+    ], 4.8),                  # side-by-side, both columns full
 }
 RECORD = os.environ.get("RECORD", "table")
 SCRIPT, STILL_AT = SCRIPTS[RECORD]
