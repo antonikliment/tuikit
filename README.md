@@ -67,6 +67,8 @@ rather than hidden in an otherwise identical line. `tab` switches layouts; below
 both halves. Diffing and highlighting are memoized per width and layout, since a
 static diff should not be recomputed every frame.
 
+![DiffView](docs/gifs/diffview.gif)
+
 Fenced code is highlighted by chroma, and which stylesheet it uses is a choice —
 `markdown.SyntaxThemes` lists the 64 that ship, so an app can offer them. From
 `go run ./examples/syntax`, cycling three of them with `tab`. The light one is in
