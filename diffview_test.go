@@ -331,3 +331,27 @@ func TestMaxLinesTailIsSingularForOneHiddenLine(t *testing.T) {
 		t.Fatalf("tail = %q, want a singular line", got[strings.LastIndex(got, "\n")+1:])
 	}
 }
+
+// Regression: wordsToRunes must hand back the tokens the closures collected.
+// A go1.26 optimizer bug corrupted the named-return slice when both encode
+// calls sat inside the return statement (see the comment in wordsToRunes):
+// dependent modules saw segfaults and runaway allocations in markIntraline.
+func TestWordsToRunesTokensStayIntact(t *testing.T) {
+	a, b, tokens := wordsToRunes("old", "new")
+	if len(a) != 1 || len(b) != 1 || len(tokens) != 2 {
+		t.Fatalf("wordsToRunes = %v %v %v", a, b, tokens)
+	}
+	if tokens[a[0]-1] != "old" || tokens[b[0]-1] != "new" {
+		t.Fatalf("token table corrupted: %q", tokens)
+	}
+}
+
+// A one-line, one-word replacement is the smallest diff that walks the
+// intraline pairing path end to end.
+func TestSingleWordReplacementRenders(t *testing.T) {
+	dv := NewDiffView(DefaultTheme()).Before("a.go", "old\n").After("a.go", "new\n")
+	out := dv.Render(76)
+	if !strings.Contains(out, "old") || !strings.Contains(out, "new") {
+		t.Fatalf("render lost the changed words:\n%s", out)
+	}
+}

@@ -526,7 +526,17 @@ func wordsToRunes(before, after string) (a, b []rune, tokens []string) {
 		}
 		return out
 	}
-	return encode(before), encode(after), tokens
+	// Encoded as separate statements on purpose. Folding both calls into the
+	// return statement — while encode appends to the named return `tokens` —
+	// is miscompiled by go1.26's optimizer when this package is built as a
+	// dependency of another module: the tokens slice header is read before the
+	// closures finish growing it, and the caller sees a corrupted slice
+	// (observed as segfaults and runaway allocations under markIntraline).
+	// Reproduces with a plain `go build`, disappears with -gcflags='-N -l'.
+	// Do not "simplify" this back into the return statement.
+	a = encode(before)
+	b = encode(after)
+	return a, b, tokens
 }
 
 // words splits a line into identifier-ish runs and single other runes, so
