@@ -12,6 +12,7 @@ Copy-paste snippets for each piece of the kit. A full runnable program lives in
 - [Searchable, following text (SearchView)](#searchable-following-text-searchview)
 - [Markdown as it streams (StreamingMarkdown)](#markdown-as-it-streams-streamingmarkdown)
 - [A file diff (DiffView)](#a-file-diff-diffview)
+- [Long scrollback (MemoList)](#long-scrollback-memolist)
 - [A modal popup (Overlay)](#a-modal-popup-overlay)
 - [Action rows](#action-rows)
 - [Resource meters](#resource-meters)
@@ -296,6 +297,69 @@ diff.Highlighter(tuikit.ChromaHighlighter("catppuccin-latte"))
 
 ```console
 go run ./examples/diffview
+## Long scrollback (MemoList)
+
+`MemoList` is for the pane that gets slower the longer a session runs: a chat
+transcript rebuilt from scratch every frame costs O(content) per repaint, while
+only a viewport of it is on screen. It renders the visible window only, memoizes
+each item's block by ID and revision, and keeps the heights it measured, so
+scrolling is a walk over cached lines.
+
+Items are anything with a stable ID and a render:
+
+```go
+type message struct {
+	id, who, body string
+	theme         tuikit.Theme
+}
+
+func (m *message) ID() string { return m.id }
+
+func (m *message) Render(width int) string {
+	return m.theme.Accent(m.theme.Cyan).Render(m.who) + "\n" +
+		lipgloss.NewStyle().Width(width).Render(m.body)
+}
+
+type chatPage struct{ list tuikit.MemoList }
+
+func newChatPage() *chatPage { return &chatPage{list: tuikit.NewMemoList()} }
+
+func (p *chatPage) Update(msg tea.Msg) tea.Cmd {
+	if key, ok := msg.(tea.KeyPressMsg); ok {
+		switch key.String() {
+		case "up":
+			p.list.ScrollBy(-1)
+		case "down":
+			p.list.ScrollBy(1)
+		}
+	}
+	return nil
+}
+
+func (p *chatPage) View(width, height int) string { return p.list.Render(width, height) }
+```
+
+The list follows the tail until the user scrolls up, and resumes when they
+scroll back down — so appending a message keeps the bottom pinned without moving
+a view somebody is reading. Anchoring is by item ID, so prepending history above
+does not jump the view either.
+
+While a message is still streaming, tell the list what changed:
+
+```go
+p.list.Invalidate(tail.ID())
+```
+
+That costs one item's render on the next frame rather than the transcript's.
+Items that would rather report it themselves can implement `Revision() int`; the
+memo drops the entry when the number changes. A width change invalidates
+everything, because wrapping changes every height.
+
+`examples/memolist` drives it with a 5,000-message transcript and a footer
+counting how many items were actually rendered on the current frame:
+
+```console
+go run ./examples/memolist
 ```
 
 ## A modal popup (Overlay)
