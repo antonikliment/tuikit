@@ -42,6 +42,12 @@ the footer:
 
 ![Selection](docs/gifs/selection.gif)
 
+Holding alt makes the drag a block: every row is clamped to the dragged column
+range, so a drag inside the left panel copies that panel and not the two beside
+it. The same drag is played twice below, linear then alt-held:
+
+![Block selection](docs/gifs/selection-block.gif)
+
 `StreamingMarkdown`, from `go run ./examples/streaming`. A generated document
 arrives a character at a time; blocks that have settled are formatted and
 cached, and the unfinished tail is rendered too, with whatever constructs it

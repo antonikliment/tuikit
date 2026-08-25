@@ -78,6 +78,21 @@ SCRIPTS = {
         (1.6, "\x1b[<0;31;7m", True),        # release: the footer echoes the copy
         (1.2, None, True),
     ], 2.6),                                 # mid-drag, two lines in
+    # The same drag twice over the three-panel row, linear then alt-held: the
+    # first runs to the ends of the lines and takes the neighbouring panels
+    # with it, the second stays inside the rectangle. Alt is button code +8.
+    "selection-block": ([
+        (1.4, None, False),                  # first paint
+        (0.7, "\x1b[<0;3;15M", True),        # press inside the left panel
+        (0.5, "\x1b[<32;12;16M", True),      # drag down and right
+        (0.6, "\x1b[<32;21;17M", True),
+        (1.8, "\x1b[<0;21;17m", True),       # release: all three panels copied
+        (0.9, "\x1b[<8;3;15M", True),        # same press, alt held
+        (0.5, "\x1b[<40;12;16M", True),
+        (0.6, "\x1b[<40;21;17M", True),
+        (1.8, "\x1b[<8;21;17m", True),       # release: just the left panel
+        (1.0, None, True),
+    ], 8.0),                                 # mid alt-drag, the block visible
     "syntax": ([
         (1.5, None, False),   # first paint
         (2.6, None, True),    # tokyonight-night
