@@ -11,6 +11,7 @@ Copy-paste snippets for each piece of the kit. A full runnable program lives in
 - [A scrolling page (viewport)](#a-scrolling-page-viewport)
 - [Searchable, following text (SearchView)](#searchable-following-text-searchview)
 - [Markdown as it streams (StreamingMarkdown)](#markdown-as-it-streams-streamingmarkdown)
+- [A file diff (DiffView)](#a-file-diff-diffview)
 - [A modal popup (Overlay)](#a-modal-popup-overlay)
 - [Action rows](#action-rows)
 - [Resource meters](#resource-meters)
@@ -257,6 +258,44 @@ endless generated document and a `-debug` flag that marks the boundary:
 
 ```console
 go run ./examples/streaming -seed=7 -cps=80 -block=3 -debug
+```
+
+## A file diff (DiffView)
+
+`DiffView` renders an edit the way a reader can actually follow it: line numbers
+on both sides, syntax highlighting by filename, and — on a modified line pair —
+emphasis on the words that changed rather than on the whole line. It renders a
+string and keeps no scroll state, so the caller owns the viewport.
+
+```go
+diff := tuikit.NewDiffView(theme).
+	Before("greeter.go", old).
+	After("greeter.go", new).
+	ContextLines(3).
+	MaxLines(height)
+
+body := diff.Render(width)          // unified
+body = diff.RenderSplit(width)      // side-by-side, or unified under 100 cols
+```
+
+Diffing and highlighting cost O(file) and a TUI repaints every frame, so results
+are memoized per width and layout; every builder call drops the memo, so a view
+rebuilt from changed content cannot serve a stale render. `MaxLines` caps the
+output with a `… +N more lines` tail, for a preview that expands later.
+
+Highlighting is chroma's, keyed on the filename and degrading to plain text for
+anything it cannot lex. Pass `Highlighter(nil)` to turn it off, `Painter(Plain)`
+to render without escapes at all, and a stylesheet name to
+`ChromaHighlighter` to match your palette:
+
+```go
+diff.Highlighter(tuikit.ChromaHighlighter("catppuccin-latte"))
+```
+
+`examples/diffview` shows both layouts over one edit:
+
+```console
+go run ./examples/diffview
 ```
 
 ## A modal popup (Overlay)
