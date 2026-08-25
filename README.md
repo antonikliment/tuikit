@@ -68,6 +68,14 @@ both halves. Diffing and highlighting are memoized per width and layout, since a
 static diff should not be recomputed every frame.
 
 ![DiffView](docs/gifs/diffview.gif)
+`MemoList`, from `go run ./examples/memolist`. A 5,000-message transcript in a
+20-line viewport: only the visible window is rendered, each message's block is
+memoized by ID and revision, and the tail is followed until you scroll up. Watch
+the counter in the footer — "rendered this frame" stays in single digits through
+paging and jumps to the top, and while only the streaming tail changes it is 1,
+not the length of the scrollback:
+
+![MemoList](docs/gifs/memolist.gif)
 
 Fenced code is highlighted by chroma, and which stylesheet it uses is a choice —
 `markdown.SyntaxThemes` lists the 64 that ship, so an app can offer them. From

@@ -95,6 +95,21 @@ SCRIPTS = {
         (2.2, "+", True),     # one more line of context
         (1.8, None, True),
     ], 4.8),                  # side-by-side, both columns full
+    # A 5,000-message transcript. What is being recorded is the counter in the
+    # footer: it stays in single digits through paging and drops to 1 while only
+    # the streaming tail changes, however far back the scrollback goes.
+    "memolist": ([
+        (2.0, None, False),   # first paint, and a few words of the tail
+        (1.6, None, True),    # following the tail: rendered this frame: 1
+        (0.8, "u", True),     # page up, off the tail
+        (0.8, "u", True),
+        (0.8, "u", True),
+        (0.6, "k", True),     # a line at a time
+        (0.6, "k", True),
+        (1.2, "g", True),     # jump to the top of 5,000 messages
+        (1.6, "G", True),     # and back to the tail, still following
+        (1.4, None, True),
+    ], 5.4),                  # scrolled up, with the counter on a paged frame
 }
 RECORD = os.environ.get("RECORD", "table")
 SCRIPT, STILL_AT = SCRIPTS[RECORD]

@@ -38,6 +38,9 @@
 //   - [DiffView] — a diff between two versions of a file, unified or
 //     side-by-side, syntax-highlighted by chroma with the changed words inside
 //     a modified line pair picked out.
+//   - [MemoList] — a virtualized list for long scrollback: only the visible
+//     window is rendered, each item's block is memoized by ID and revision, and
+//     the tail is followed until the user scrolls up.
 //   - [Overlay] — a dismissable modal popup composited over a finished view,
 //     pinnable to any of nine anchors via [Alignment].
 //   - [Theme.ActionRow] — a labelled row of selectable actions.
