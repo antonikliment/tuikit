@@ -444,7 +444,8 @@ func markIntraline(lines []diffLine) {
 // run counts how many consecutive lines from i have the given kind.
 func run(lines []diffLine, i int, kind diffKind) int {
 	n := 0
-	for ; i+n < len(lines) && lines[i+n].kind == kind; n++ {
+	for i+n < len(lines) && lines[i+n].kind == kind {
+		n++
 	}
 	return n
 }
