@@ -6,7 +6,7 @@
  4                                               │  4
  5 - func greet(name string) string {            │  5 + func greet(name string, times int) string {
  6 -     return "hello, " + name                 │  6 +     if times > 1 {
-                                                 │  7 +         return fmt.Sprintf("hello, %s x%d",…
+                                                 │  7 +         return fmt.Sprintf("hello, %s x%d"…
                                                  │  8 +     }
                                                  │  9 +     return "hi, " + name
  7   }                                           │ 10   }

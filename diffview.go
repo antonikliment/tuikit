@@ -100,12 +100,18 @@ func NewDiffView(theme Theme) *DiffView {
 
 // Before sets the original path and content.
 func (d *DiffView) Before(path, content string) *DiffView {
+	if path == d.beforePath && content == d.before {
+		return d
+	}
 	d.beforePath, d.before = path, content
 	return d.invalidate()
 }
 
 // After sets the new path and content.
 func (d *DiffView) After(path, content string) *DiffView {
+	if path == d.afterPath && content == d.after {
+		return d
+	}
 	d.afterPath, d.after = path, content
 	return d.invalidate()
 }
@@ -114,14 +120,23 @@ func (d *DiffView) After(path, content string) *DiffView {
 // A negative count means zero; a count at or above the file length shows the
 // whole file as one hunk.
 func (d *DiffView) ContextLines(n int) *DiffView {
-	d.contextLine = max(0, n)
+	if n = max(0, n); n == d.contextLine {
+		return d
+	}
+	d.contextLine = n
 	return d.invalidate()
 }
 
 // MaxLines caps the output at n rendered lines, replacing the remainder with a
 // "… +N more lines" tail so a caller can show a preview and expand later. Zero
 // or less means no cap.
+//
+// Like every setter, an unchanged value is a no-op, so a view function may set
+// it every frame without dropping the render memo.
 func (d *DiffView) MaxLines(n int) *DiffView {
+	if n == d.maxLines {
+		return d
+	}
 	d.maxLines = n
 	return d.invalidate()
 }
@@ -174,8 +189,11 @@ func (d *DiffView) render(width int, wantSplit bool) string {
 	rows := d.rows(width, split)
 	if d.maxLines > 0 && len(rows) > d.maxLines {
 		hidden := len(rows) - d.maxLines
-		rows = append(rows[:d.maxLines:d.maxLines],
-			d.paint(d.theme.MutedStyle(), fmt.Sprintf("… +%d more lines", hidden)))
+		tail := fmt.Sprintf("… +%d more lines", hidden)
+		if hidden == 1 {
+			tail = "… +1 more line"
+		}
+		rows = append(rows[:d.maxLines:d.maxLines], d.paint(d.theme.MutedStyle(), tail))
 	}
 	out := strings.Join(rows, "\n")
 	d.cache[key] = out
@@ -275,7 +293,10 @@ func (d *DiffView) cell(line *diffLine, numWidth, column int, old bool) string {
 		number = line.oldNum
 	}
 	gutter := d.paint(style, num(number, numWidth)+" "+line.sign())
-	body := ansi.Truncate(d.content(*line, style), max(0, column-numWidth-2), "…")
+	// The gutter is numWidth+2 columns and the space after it one more, so the
+	// body gets the rest — a longer cap would push this cell past column and,
+	// on the left side, bend the center gutter out of line.
+	body := ansi.Truncate(d.content(*line, style), max(0, column-numWidth-3), "…")
 	return Pad(gutter+" "+body, column)
 }
 
@@ -410,13 +431,19 @@ func expandTabs(line string) string {
 	if !strings.Contains(line, "\t") {
 		return line
 	}
+	// The tab stops are display columns, which byte or rune counts misplace as
+	// soon as the line holds a multibyte or wide rune.
 	var b strings.Builder
+	col := 0
 	for _, r := range line {
 		if r != '\t' {
 			b.WriteRune(r)
+			col += ansi.StringWidth(string(r))
 			continue
 		}
-		b.WriteString(strings.Repeat(" ", TabWidth-b.Len()%TabWidth))
+		n := TabWidth - col%TabWidth
+		b.WriteString(strings.Repeat(" ", n))
+		col += n
 	}
 	return b.String()
 }
@@ -601,9 +628,12 @@ func digits(n int) int {
 // The returned function caches its lexer per filename and is safe for
 // concurrent use.
 func ChromaHighlighter(styleName string) Highlighter {
-	style := styles.Get(styleName)
-	if style == nil {
-		style = styles.Get(DefaultDiffSyntaxTheme)
+	// styles.Get never returns nil — it resolves unknown names to chroma's own
+	// near-monochrome fallback — so the registry is checked directly to land on
+	// [DefaultDiffSyntaxTheme] instead.
+	style, ok := styles.Registry[styleName]
+	if !ok {
+		style = styles.Registry[DefaultDiffSyntaxTheme]
 	}
 	formatter := formatters.Get("terminal256")
 	var mu sync.Mutex
