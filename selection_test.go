@@ -139,3 +139,93 @@ func TestSelectionPaintEmptyIsUntouched(t *testing.T) {
 		t.Fatalf("empty selection painted %q", got)
 	}
 }
+
+// panelsView is the three-panel frame from issue #18: a drag inside the left
+// panel must not pick up the panels beside it.
+const panelsView = "" +
+	"┌──────────────────────┐┌──────────────────────┐┌──────────────────────┐\n" +
+	"│ logs                 ││ tools                ││ usage                │\n" +
+	"│ 12:01 boot ok        ││ read_file  ✓         ││ prompt 1.2k          │\n" +
+	"│ 12:02 listening      ││ shell      ✓         ││ output  340          │\n" +
+	"│ 12:03 request /x     ││ file_search ✕        ││ total  1.5k          │\n" +
+	"└──────────────────────┘└──────────────────────┘└──────────────────────┘"
+
+func TestSelectionBlockStaysInsideOnePanel(t *testing.T) {
+	var s Selection
+	s.Block = true
+	s.Begin(Cell{Row: 3, Col: 2})
+	s.Extend(Cell{Row: 5, Col: 20})
+	want := "12:02 listening\n12:03 request /x\n──────────────────"
+	if got := s.Text(panelsView); got != want {
+		t.Fatalf("Text = %q, want %q", got, want)
+	}
+}
+
+func TestSelectionLinearStillRunsToLineEnds(t *testing.T) {
+	var s Selection
+	s.Begin(Cell{Row: 3, Col: 2})
+	s.Extend(Cell{Row: 5, Col: 20})
+	got := s.Text(panelsView)
+	if !strings.Contains(got, "shell") || !strings.Contains(got, "total  1.5k") {
+		t.Fatalf("linear selection dropped the neighbouring panels: %q", got)
+	}
+}
+
+func TestSelectionBlockZeroWidthDragSelectsNothing(t *testing.T) {
+	var s Selection
+	s.Block = true
+	s.Begin(Cell{Row: 2, Col: 8})
+	s.Extend(Cell{Row: 4, Col: 8})
+	if s.Empty() {
+		t.Fatal("a vertical drag is not a selection")
+	}
+	if got := s.Text(panelsView); got != "" {
+		t.Fatalf("zero-width block selected %q", got)
+	}
+	if got := s.Paint(panelsView, highlight()); got != panelsView {
+		t.Fatalf("zero-width block painted %q", got)
+	}
+}
+
+func TestSelectionBlockIsTheSameDraggedRightToLeft(t *testing.T) {
+	var forward, backward Selection
+	forward.Block, backward.Block = true, true
+	forward.Begin(Cell{Row: 3, Col: 2})
+	forward.Extend(Cell{Row: 5, Col: 20})
+	backward.Begin(Cell{Row: 5, Col: 20})
+	backward.Extend(Cell{Row: 3, Col: 2})
+	if got, want := backward.Text(panelsView), forward.Text(panelsView); got != want {
+		t.Fatalf("backward drag = %q, forward = %q", got, want)
+	}
+	// Up-and-rightwards too, so neither end owns a column.
+	var mixed Selection
+	mixed.Block = true
+	mixed.Begin(Cell{Row: 5, Col: 20})
+	mixed.Extend(Cell{Row: 3, Col: 2})
+	if got, want := mixed.Text(panelsView), forward.Text(panelsView); got != want {
+		t.Fatalf("mixed drag = %q, forward = %q", got, want)
+	}
+}
+
+func TestSelectionBlockSingleRowMatchesLinear(t *testing.T) {
+	var block, linear Selection
+	block.Block = true
+	block.Begin(Cell{Row: 0, Col: 6})
+	block.Extend(Cell{Row: 0, Col: 11})
+	linear.Begin(Cell{Row: 0, Col: 6})
+	linear.Extend(Cell{Row: 0, Col: 11})
+	if got, want := block.Text(selectionView), linear.Text(selectionView); got != want {
+		t.Fatalf("block single row = %q, linear = %q", got, want)
+	}
+}
+
+func TestSelectionBlockClearKeepsTheMode(t *testing.T) {
+	var s Selection
+	s.Block = true
+	s.Begin(Cell{Row: 0, Col: 0})
+	s.Extend(Cell{Row: 1, Col: 4})
+	s.Clear()
+	if !s.Block {
+		t.Fatal("Clear dropped block mode")
+	}
+}
