@@ -263,6 +263,53 @@ func TestScrollToTopShowsTheFirstItem(t *testing.T) {
 	}
 }
 
+func TestMemoListItemGeometry(t *testing.T) {
+	calls := 0
+	l := NewMemoList()
+	l.SetItems([]ListItem{
+		&countItem{id: "a", lines: 3, render: &calls},
+		&countItem{id: "b", lines: 3, render: &calls},
+		&countItem{id: "c", lines: 3, render: &calls},
+	})
+	l.Render(40, 4) // tail: b's last line, then c
+	if start, end, ok := l.ItemRange("b"); !ok || start != -2 || end != 1 {
+		t.Fatalf("b range = %d,%d,%v", start, end, ok)
+	}
+	if id, line, ok := l.ItemAt(0); !ok || id != "b" || line != 2 {
+		t.Fatalf("row 0 = %q,%d,%v", id, line, ok)
+	}
+	if id, line, ok := l.ItemAt(1); !ok || id != "c" || line != 0 {
+		t.Fatalf("row 1 = %q,%d,%v", id, line, ok)
+	}
+	if !l.EnsureVisible("a") || l.Following() {
+		t.Fatal("failed to focus first item")
+	}
+	if got := l.Render(40, 4); !strings.HasPrefix(got, "a:0") {
+		t.Fatalf("focus moved to %q", got)
+	}
+	if _, _, ok := l.ItemAt(4); ok {
+		t.Fatal("row past viewport matched")
+	}
+}
+
+func TestMemoListPreservesIntentionalBlankRows(t *testing.T) {
+	calls := 0
+	l := NewMemoList()
+	l.SetItems([]ListItem{
+		&countItem{id: "a", lines: 1, body: "first", render: &calls},
+		blankItem{},
+		&countItem{id: "b", lines: 1, body: "last", render: &calls},
+	})
+	if got := l.Render(40, 3); strings.Count(got, "\n") != 2 || !strings.Contains(got, "\n\n") {
+		t.Fatalf("blank row lost: %q", got)
+	}
+}
+
+type blankItem struct{}
+
+func (blankItem) ID() string        { return "blank" }
+func (blankItem) Render(int) string { return "\n\n" }
+
 // Multi-line items must be shown partially at the top edge rather than being
 // skipped or forced whole into the window.
 func TestATallItemIsClippedAtTheTopEdge(t *testing.T) {
