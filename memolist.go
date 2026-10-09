@@ -160,6 +160,58 @@ func (l *MemoList) Render(width, height int) string {
 	return strings.Join(l.anchoredWindow(height), "\n")
 }
 
+// ItemRange reports an item's [start,end) rows in the last viewport. Start
+// may be negative and end may exceed the height when the item is clipped.
+func (l *MemoList) ItemRange(id string) (start, end int, ok bool) {
+	if l.height <= 0 || len(l.items) == 0 {
+		return 0, 0, false
+	}
+	idx, line := l.anchorPos()
+	row := -line
+	for i := idx; i < len(l.items) && row < l.height; i++ {
+		next := row + len(l.lines(i))
+		if l.items[i].ID() == id && next > 0 {
+			return row, next, true
+		}
+		row = next
+	}
+	return 0, 0, false
+}
+
+// ItemAt returns the item and its line at a viewport row.
+func (l *MemoList) ItemAt(row int) (id string, line int, ok bool) {
+	if row < 0 || row >= l.height || len(l.items) == 0 {
+		return "", 0, false
+	}
+	idx, offset := l.anchorPos()
+	for i, start := idx, -offset; i < len(l.items) && start <= row; i++ {
+		end := start + len(l.lines(i))
+		if row < end {
+			return l.items[i].ID(), row - start, true
+		}
+		start = end
+	}
+	return "", 0, false
+}
+
+// EnsureVisible scrolls to an item only when its first line is off screen.
+// Long items remain anchored at their first line so their header stays visible.
+func (l *MemoList) EnsureVisible(id string) bool {
+	for _, item := range l.items {
+		if item.ID() != id {
+			continue
+		}
+		start, _, visible := l.ItemRange(id)
+		if visible && start >= 0 {
+			return true
+		}
+		l.anchor = anchor{id: id}
+		l.follow = false
+		return true
+	}
+	return false
+}
+
 // anchoredWindow collects height lines downward from the anchor.
 func (l *MemoList) anchoredWindow(height int) []string {
 	idx, line := l.anchorPos()
@@ -242,7 +294,7 @@ func (l *MemoList) lines(i int) []string {
 	if entry, ok := l.memo[id]; ok && entry.rev == rev {
 		return entry.lines
 	}
-	lines := strings.Split(strings.TrimRight(item.Render(l.width), "\n"), "\n")
+	lines := strings.Split(strings.TrimSuffix(item.Render(l.width), "\n"), "\n")
 	l.memo[id] = memoEntry{rev: rev, lines: lines}
 	return lines
 }
