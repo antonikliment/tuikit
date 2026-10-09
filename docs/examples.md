@@ -280,9 +280,10 @@ body = diff.RenderSplit(width)      // side-by-side, or unified under 100 cols
 ```
 
 Diffing and highlighting cost O(file) and a TUI repaints every frame, so results
-are memoized per width and layout; every builder call drops the memo, so a view
-rebuilt from changed content cannot serve a stale render. `MaxLines` caps the
-output with a `… +N more lines` tail, for a preview that expands later.
+are memoized per width and layout; setters drop the memo when their input
+changes, so a view rebuilt from changed content cannot serve a stale render.
+`MaxLines` caps output with a `… +N more lines` tail for a preview that expands
+later.
 
 Highlighting is chroma's, keyed on the filename and degrading to plain text for
 anything it cannot lex. Pass `Highlighter(nil)` to turn it off, `Painter(Plain)`
@@ -293,10 +294,28 @@ to render without escapes at all, and a stylesheet name to
 diff.Highlighter(tuikit.ChromaHighlighter("catppuccin-latte"))
 ```
 
+For `git diff` or `git show` output, parse each file's changed hunks before
+passing them to `DiffView`:
+
+```go
+for _, file := range tuikit.ParseUnifiedDiff(gitOutput) {
+	diff := tuikit.NewDiffView(theme).
+		Before(file.Path, file.Before).
+		After(file.Path, file.After)
+	view += diff.Render(width)
+}
+```
+
+`Before` and `After` contain reconstructed hunk fragments, not complete files;
+line numbers in the rendered view are relative to those fragments. The parser
+skips commit and file metadata and returns one entry per `diff --git` header.
+
 `examples/diffview` shows both layouts over one edit:
 
 ```console
 go run ./examples/diffview
+```
+
 ## Long scrollback (MemoList)
 
 `MemoList` is for the pane that gets slower the longer a session runs: a chat
@@ -338,6 +357,19 @@ func (p *chatPage) Update(msg tea.Msg) tea.Cmd {
 
 func (p *chatPage) View(width, height int) string { return p.list.Render(width, height) }
 ```
+
+After `Render`, use viewport rows for clicks and focused navigation:
+
+```go
+id, line, ok := page.list.ItemAt(mouseRow)
+start, end, visible := page.list.ItemRange(id)
+page.list.EnsureVisible(id) // scroll only if its first line is off screen
+```
+
+`ItemRange` reports `[start, end)` relative to the viewport. A partially visible
+item may start above row zero or end below the viewport height. IDs must be
+unique and stable across frames so row lookup, caching, and scroll anchoring
+refer to the same item.
 
 The list follows the tail until the user scrolls up, and resumes when they
 scroll back down — so appending a message keeps the bottom pinned without moving

@@ -66,6 +66,8 @@ rather than hidden in an otherwise identical line. `tab` switches layouts; below
 100 columns the side-by-side layout falls back to unified rather than truncating
 both halves. Diffing and highlighting are memoized per width and layout, since a
 static diff should not be recomputed every frame.
+Use `ParseUnifiedDiff` to feed changed hunks from multi-file `git diff` or
+`git show` output into one `DiffView` per file.
 
 ![DiffView](docs/gifs/diffview.gif)
 `MemoList`, from `go run ./examples/memolist`. A 5,000-message transcript in a
@@ -74,6 +76,8 @@ memoized by ID and revision, and the tail is followed until you scroll up. Watch
 the counter in the footer — "rendered this frame" stays in single digits through
 paging and jumps to the top, and while only the streaming tail changes it is 1,
 not the length of the scrollback:
+`ItemAt`, `ItemRange`, and `EnsureVisible` expose viewport row lookup for clicks
+and focus scrolling without walking the full transcript.
 
 ![MemoList](docs/gifs/memolist.gif)
 
