@@ -18,14 +18,21 @@ type Cell struct{ Row, Col int }
 // [Selection.Text] each time, so a selection never goes stale against content
 // that has been re-rendered underneath it.
 //
-// Selection is linear, the way a text editor and a terminal are: the first row
-// runs from the anchor to the end of the line, whole rows follow, and the last
-// row ends at the cursor. That is right for a transcript and wrong for a frame
-// laid out in columns, where a drag inside one panel still picks up the panels
-// beside it — see issue #18 for block and region-aware modes.
+// Selection is linear by default, the way a text editor and a terminal are:
+// the first row runs from the anchor to the end of the line, whole rows
+// follow, and the last row ends at the cursor. That is right for a transcript
+// and wrong for a frame laid out in columns, where a drag inside one panel
+// still picks up the panels beside it. Set [Selection.Block] for that case: it
+// clamps every row to the dragged column range, so the selection is the
+// rectangle the mouse drew. Hosts usually bind it to alt-drag, the terminal
+// convention.
 //
-// The zero value is an empty selection, ready to use.
+// The zero value is an empty linear selection, ready to use.
 type Selection struct {
+	// Block selects a rectangle rather than a run of lines. It can be flipped
+	// mid-drag: nothing is cached, so the next Paint or Text just reads it.
+	Block bool
+
 	anchor Cell
 	cursor Cell
 	active bool
@@ -43,8 +50,8 @@ func (s *Selection) Extend(c Cell) {
 	}
 }
 
-// Clear drops the selection.
-func (s *Selection) Clear() { *s = Selection{} }
+// Clear drops the selection, keeping the Block mode the host set.
+func (s *Selection) Clear() { *s = Selection{Block: s.Block} }
 
 // Empty reports whether there is nothing to paint or copy — no selection, or
 // one that never moved off its anchor (a plain click).
@@ -101,11 +108,16 @@ func (s Selection) span(row, width int) (int, int, bool) {
 		return 0, 0, false
 	}
 	left, right := 0, width
-	if row == start.Row {
-		left = start.Col
-	}
-	if row == end.Row {
-		right = end.Col
+	switch {
+	case s.Block:
+		left, right = min(s.anchor.Col, s.cursor.Col), max(s.anchor.Col, s.cursor.Col)
+	default:
+		if row == start.Row {
+			left = start.Col
+		}
+		if row == end.Row {
+			right = end.Col
+		}
 	}
 	left, right = clamp(left, width), clamp(right, width)
 	return left, right, left < right
