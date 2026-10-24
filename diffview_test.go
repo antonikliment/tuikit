@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // update rewrites the golden files instead of comparing against them:
@@ -353,5 +354,47 @@ func TestSingleWordReplacementRenders(t *testing.T) {
 	out := dv.Render(76)
 	if !strings.Contains(out, "old") || !strings.Contains(out, "new") {
 		t.Fatalf("render lost the changed words:\n%s", out)
+	}
+}
+
+// TestTintedLayout: one number column with real positions, a full-width
+// background on changed lines, no ---/+++/@@ lines.
+func TestTintedLayout(t *testing.T) {
+	before := "package calc\n\nfunc A() {}\n\nfunc B() {}\n"
+	after := "package calc\n\nfunc A() {}\n\nfunc B() {}\n\nfunc C() {}\n"
+	out := NewDiffView(DefaultTheme()).Highlighter(nil).
+		Before("calc.go", before).After("calc.go", after).
+		Tint(lipgloss.Color("22"), lipgloss.Color("52")).Render(40)
+	plain := ansi.Strip(out)
+	for _, bad := range []string{"---", "+++", "@@"} {
+		if strings.Contains(plain, bad) {
+			t.Fatalf("tinted output has %q:\n%s", bad, plain)
+		}
+	}
+	rows := strings.Split(plain, "\n")
+	if got := rows[len(rows)-1]; !strings.HasPrefix(got, "7 + func C() {}") || ansi.StringWidth(got) != 40 {
+		t.Fatalf("last row = %q, want line 7 added, padded to 40", got)
+	}
+	if !strings.Contains(out, "\x1b[48;5;22m") {
+		t.Fatalf("added line has no background: %q", out)
+	}
+}
+
+// An edit that leaves the file as it was renders nothing rather than
+// panicking on an empty line list.
+func TestTintedLayoutNoChange(t *testing.T) {
+	same := "package calc\n"
+	_ = NewDiffView(DefaultTheme()).Highlighter(nil).Before("calc.go", same).After("calc.go", same).
+		Tint(lipgloss.Color("22"), lipgloss.Color("52")).Render(40)
+}
+
+// A background-only reset inside highlighted code keeps the tint.
+func TestTintedRowSurvivesBackgroundReset(t *testing.T) {
+	out := NewDiffView(DefaultTheme()).
+		Highlighter(func(_, line string) string { return "\x1b[49m" + line }).
+		Before("calc.go", "a\n").After("calc.go", "a\nb\n").
+		Tint(lipgloss.Color("22"), lipgloss.Color("52")).Render(40)
+	if !strings.Contains(out, "\x1b[49m\x1b[48;5;22m") {
+		t.Fatalf("tint not re-asserted after a background reset: %q", out)
 	}
 }
