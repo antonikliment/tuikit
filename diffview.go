@@ -2,6 +2,7 @@ package tuikit
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"sync"
 	"unicode"
@@ -46,6 +47,9 @@ type DiffView struct {
 	after       string
 	contextLine int
 	maxLines    int
+	// addBg and delBg, when set by [DiffView.Tint], switch the unified layout
+	// to the tinted form.
+	addBg, delBg color.Color
 
 	// lines is the diff itself: computed once per content change and shared by
 	// both layouts, since neither changes what the diff is.
@@ -157,6 +161,18 @@ func (d *DiffView) Highlighter(h Highlighter) *DiffView {
 	return d.invalidate()
 }
 
+// Tint switches [DiffView.Render] to the tinted unified layout that modern
+// coding agents use: one line-number column holding each line's position in
+// its own version of the file, added and removed lines on a full-width add or
+// del background, syntax colors kept on every line, and no ---/+++ or @@
+// lines (hunks are parted by a muted ⋯ row). The caller is expected to put its
+// own one-line file header above it. Nil for both restores the classic layout.
+// RenderSplit is unaffected.
+func (d *DiffView) Tint(add, del color.Color) *DiffView {
+	d.addBg, d.delBg = add, del
+	return d.invalidate()
+}
+
 // invalidate drops everything derived from the builder's inputs.
 func (d *DiffView) invalidate() *DiffView {
 	d.lines = nil
@@ -206,6 +222,9 @@ func (d *DiffView) rows(width int, split bool) []string {
 	if len(lines) == 0 {
 		return []string{d.paint(d.theme.MutedStyle(), "no changes")}
 	}
+	if !split && (d.addBg != nil || d.delBg != nil) {
+		return d.tintedRows(lines, width)
+	}
 	rows := []string{
 		d.paint(d.theme.Accent(d.theme.Red), "--- "+d.pathOr(d.beforePath, d.afterPath)),
 		d.paint(d.theme.Accent(d.theme.Green), "+++ "+d.pathOr(d.afterPath, d.beforePath)),
@@ -222,6 +241,60 @@ func (d *DiffView) rows(width int, split bool) []string {
 		}
 	}
 	return rows
+}
+
+// tintedRows is the [DiffView.Tint] layout.
+func (d *DiffView) tintedRows(lines []diffLine, width int) []string {
+	last := lines[len(lines)-1]
+	numWidth := digits(max(last.oldNum, last.newNum))
+	var rows []string
+	for i, h := range hunks(lines, d.contextLine) {
+		if i > 0 {
+			rows = append(rows, d.paint(d.theme.MutedStyle(), strings.Repeat(" ", numWidth)+"   ⋯"))
+		}
+		for _, line := range h.lines {
+			rows = append(rows, d.tintedRow(line, numWidth, width))
+		}
+	}
+	return rows
+}
+
+// tintedRow renders "num ± code" for one line, padded to width under its
+// background when it is an added or removed line. Highlighted code carries its
+// own resets, so the background is re-asserted after each one.
+func (d *DiffView) tintedRow(line diffLine, numWidth, width int) string {
+	number, bg := line.newNum, color.Color(nil)
+	switch line.kind {
+	case kindInsert:
+		bg = d.addBg
+	case kindDelete:
+		number, bg = line.oldNum, d.delBg
+	}
+	style := d.style(line.kind)
+	code := line.text
+	if d.highlight != nil {
+		code = d.highlight(d.pathOr(d.afterPath, d.beforePath), line.text)
+	} else if line.kind != kindEqual {
+		code = d.paint(style, line.text)
+	}
+	row := d.paint(d.theme.MutedStyle(), num(number, numWidth)) + " " + d.paint(style, line.sign()) + " " + code
+	row = ansi.Truncate(row, width, "…")
+	if bg == nil {
+		return strings.TrimRight(row, " ")
+	}
+	open := backgroundSGR(bg)
+	if d.paint(lipgloss.NewStyle().Bold(true), "x") == "x" || open == "" { // a Plain painter draws no color
+		return strings.TrimRight(row, " ")
+	}
+	row = strings.NewReplacer("\x1b[0m", "\x1b[0m"+open, "\x1b[m", "\x1b[m"+open).Replace(row)
+	return open + row + strings.Repeat(" ", max(0, width-ansi.StringWidth(row))) + "\x1b[0m"
+}
+
+// backgroundSGR is the escape sequence that sets c as the background.
+func backgroundSGR(c color.Color) string {
+	rendered := lipgloss.NewStyle().Background(c).Render("x")
+	open, _, _ := strings.Cut(rendered, "x")
+	return open
 }
 
 // pathOr falls back to the other side's path, so a one-sided builder (a created
