@@ -245,6 +245,9 @@ func (d *DiffView) rows(width int, split bool) []string {
 
 // tintedRows is the [DiffView.Tint] layout.
 func (d *DiffView) tintedRows(lines []diffLine, width int) []string {
+	if len(lines) == 0 {
+		return nil
+	}
 	last := lines[len(lines)-1]
 	numWidth := digits(max(last.oldNum, last.newNum))
 	var rows []string
@@ -286,7 +289,9 @@ func (d *DiffView) tintedRow(line diffLine, numWidth, width int) string {
 	if d.paint(lipgloss.NewStyle().Bold(true), "x") == "x" || open == "" { // a Plain painter draws no color
 		return strings.TrimRight(row, " ")
 	}
-	row = strings.NewReplacer("\x1b[0m", "\x1b[0m"+open, "\x1b[m", "\x1b[m"+open).Replace(row)
+	// Any reset that clears the background (full or background-only) gets
+	// the tint back, or the rest of the line would drop it.
+	row = strings.NewReplacer("\x1b[0m", "\x1b[0m"+open, "\x1b[m", "\x1b[m"+open, "\x1b[49m", "\x1b[49m"+open).Replace(row)
 	return open + row + strings.Repeat(" ", max(0, width-ansi.StringWidth(row))) + "\x1b[0m"
 }
 
