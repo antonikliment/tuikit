@@ -121,8 +121,17 @@ func New(theme tuikit.Theme, opts ...Option) tuikit.RenderFunc {
 		if err != nil {
 			return text
 		}
-		return trimPadding(out)
+		return trimPadding(expandTabs(out))
 	}
+}
+
+// tabWidth is how many columns a tab in a fenced code block takes. glamour
+// passes tabs through, and a cell-based view gives a raw tab no width, so Go
+// bodies would print flush left.
+const tabWidth = 4
+
+func expandTabs(out string) string {
+	return strings.ReplaceAll(out, "\t", strings.Repeat(" ", tabWidth))
 }
 
 // trimPadding strips glamour's line padding and surrounding blank lines so the
