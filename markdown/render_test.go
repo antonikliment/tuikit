@@ -275,3 +275,13 @@ func TestSyntaxThemesNamesAreHonored(t *testing.T) {
 		t.Fatalf("only %d of %d listed themes changed the output", honored, len(SyntaxThemes()))
 	}
 }
+
+// A tab-indented code body keeps its indentation as spaces: a cell-based view
+// gives a raw tab no width, so it would print flush left.
+func TestNewExpandsTabsInCode(t *testing.T) {
+	render := New(tuikit.DefaultTheme())
+	got := xansi.Strip(render("```go\nfunc Mul(a, b int) int {\n\treturn a * b\n}\n```", 60))
+	if strings.Contains(got, "\t") || !strings.Contains(got, "    return a * b") {
+		t.Fatalf("code body = %q, want the tab expanded to spaces", got)
+	}
+}
