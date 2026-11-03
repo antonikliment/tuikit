@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -190,5 +191,58 @@ func TestOverlayHintMentionsScrollOnlyWhenScrollable(t *testing.T) {
 	o.Open("help", strings.Repeat("line\n", 100))
 	if got := ansi.Strip(o.Render(background(60, 20), 60, 20)); !strings.Contains(got, "scroll") {
 		t.Fatalf("overflowing content should advertise scrolling:\n%s", got)
+	}
+}
+
+func TestOverlayWheelScrollsContent(t *testing.T) {
+	o := testOverlay()
+	o.Open("log", strings.Repeat("line\n", 100))
+	o.Render(background(60, 20), 60, 20)
+	if !o.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown}) {
+		t.Fatal("an open overlay should claim the wheel")
+	}
+	if o.vp.AtTop() {
+		t.Fatal("wheel down did not scroll the content")
+	}
+	o.Close()
+	if o.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown}) {
+		t.Fatal("a closed overlay should not claim the wheel")
+	}
+}
+
+func TestOverlayOpenFuncLaysOutAtFrameWidth(t *testing.T) {
+	o := testOverlay()
+	var widths []int
+	o.OpenFunc("calls", func(width int) string {
+		widths = append(widths, width)
+		return strings.Repeat("r", width) + "\n" + strings.Repeat("s", width)
+	})
+	for _, frame := range []int{80, 50} {
+		out := o.Render(background(frame, 12), frame, 12)
+		if got := strings.Count(ansi.Strip(out), strings.Repeat("r", widths[len(widths)-1])); got != 1 {
+			t.Fatalf("frame %d: a full-width row wrapped or vanished:\n%s", frame, ansi.Strip(out))
+		}
+	}
+	if widths[0] <= widths[1] {
+		t.Fatalf("layout widths %v: a narrower frame should lay out narrower", widths)
+	}
+	o.Open("plain", "body")
+	if o.Render(background(40, 10), 40, 10); o.Content() != "body" {
+		t.Fatalf("Open after OpenFunc kept the layout: %q", o.Content())
+	}
+}
+
+func TestOverlayReserveBottomKeepsRowsClear(t *testing.T) {
+	o := testOverlay()
+	o.Align.ReserveBottom = 3
+	o.Open("t", strings.Repeat("row\n", 40))
+	lines := strings.Split(ansi.Strip(o.Render(background(40, 16), 40, 16)), "\n")
+	if len(lines) != 16 {
+		t.Fatalf("frame height %d, want 16", len(lines))
+	}
+	for _, line := range lines[13:] {
+		if line != strings.Repeat("x", 40) {
+			t.Fatalf("reserved row covered: %q", line)
+		}
 	}
 }

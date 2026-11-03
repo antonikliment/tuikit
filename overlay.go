@@ -37,6 +37,7 @@ type Overlay struct {
 	vp      viewport.Model
 	open    bool
 	content string
+	layout  func(width int) string
 }
 
 // Overlay geometry: the box sizes itself to its content, floored at the
@@ -64,6 +65,9 @@ type Alignment struct {
 	Vertical   lipgloss.Position // lipgloss.Top, Center, Bottom
 	ShiftX     int
 	ShiftY     int
+	// ReserveBottom keeps this many rows at the bottom of the frame clear of
+	// the box, so a host's input or status rows stay visible under it.
+	ReserveBottom int
 }
 
 // NewOverlay returns a closed Overlay drawing from the given theme, centered.
@@ -78,13 +82,22 @@ func NewOverlay(theme Theme) Overlay {
 // Open shows content under the given title, scrolled to the top. Calling it on
 // an already-open Overlay replaces what is showing.
 func (o *Overlay) Open(title, content string) {
-	o.title, o.content, o.open = title, content, true
+	o.title, o.content, o.open, o.layout = title, content, true, nil
 	o.vp.GotoTop()
+}
+
+// OpenFunc is Open for content laid out to fit: layout is called on every
+// Render with the widest text the frame leaves room for, so rows the host
+// truncates to that width stay one line each and follow a resize. The box
+// still shrinks to the widest line layout returns.
+func (o *Overlay) OpenFunc(title string, layout func(width int) string) {
+	o.Open(title, "")
+	o.layout = layout
 }
 
 // Close hides the Overlay and drops its content.
 func (o *Overlay) Close() {
-	o.title, o.content, o.open = "", "", false
+	o.title, o.content, o.open, o.layout = "", "", false, nil
 }
 
 // IsOpen reports whether the Overlay is showing.
@@ -93,7 +106,8 @@ func (o *Overlay) IsOpen() bool { return o.open }
 // Title is the title the Overlay was opened with.
 func (o *Overlay) Title() string { return o.title }
 
-// Content is the text the Overlay was opened with, unwrapped.
+// Content is the text the Overlay was opened with, unwrapped; for OpenFunc,
+// what layout returned at the last Render.
 func (o *Overlay) Content() string { return o.content }
 
 // Update offers a message to an open Overlay and reports whether it was
@@ -102,6 +116,10 @@ func (o *Overlay) Content() string { return o.content }
 func (o *Overlay) Update(msg tea.Msg) bool {
 	if !o.open {
 		return false
+	}
+	if wheel, ok := msg.(tea.MouseWheelMsg); ok {
+		o.vp, _ = o.vp.Update(wheel)
+		return true
 	}
 	press, ok := msg.(tea.KeyPressMsg)
 	if !ok {
@@ -135,9 +153,10 @@ func (o *Overlay) Render(bg string, width, height int) string {
 	if !o.open || width <= 0 || height <= 0 {
 		return bg
 	}
-	box := o.box(width, height)
+	area := max(1, height-o.Align.ReserveBottom)
+	box := o.box(width, area)
 	x := place(width-lipgloss.Width(box), o.Align.Horizontal, o.Align.ShiftX)
-	y := place(height-lipgloss.Height(box), o.Align.Vertical, o.Align.ShiftY)
+	y := place(area-lipgloss.Height(box), o.Align.Vertical, o.Align.ShiftY)
 	// A Layer's X/Y only take effect through a Compositor — drawn straight onto
 	// a Canvas it lands at the origin.
 	layers := lipgloss.NewCompositor(
@@ -155,6 +174,9 @@ func (o *Overlay) box(width, height int) string {
 	// chrome reserves the title and the "esc close" row, which never scroll.
 	// The hint row counts toward the width: a narrow report must not truncate
 	// the line telling the reader how to get out of it.
+	if o.layout != nil {
+		o.content = o.layout(max(1, fitOverlay(width, minOverlayWidth, width)-overlayHChrome))
+	}
 	want := max(lipgloss.Width(o.content), lipgloss.Width(o.title), lipgloss.Width(o.fullHint()))
 	boxW := fitOverlay(want+overlayHChrome, minOverlayWidth, width)
 	innerW := max(1, boxW-overlayHChrome)
