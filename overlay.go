@@ -65,6 +65,9 @@ type Alignment struct {
 	Vertical   lipgloss.Position // lipgloss.Top, Center, Bottom
 	ShiftX     int
 	ShiftY     int
+	// ReserveBottom keeps this many rows at the bottom of the frame clear of
+	// the box, so a host's input or status rows stay visible under it.
+	ReserveBottom int
 }
 
 // NewOverlay returns a closed Overlay drawing from the given theme, centered.
@@ -150,9 +153,10 @@ func (o *Overlay) Render(bg string, width, height int) string {
 	if !o.open || width <= 0 || height <= 0 {
 		return bg
 	}
-	box := o.box(width, height)
+	area := max(1, height-o.Align.ReserveBottom)
+	box := o.box(width, area)
 	x := place(width-lipgloss.Width(box), o.Align.Horizontal, o.Align.ShiftX)
-	y := place(height-lipgloss.Height(box), o.Align.Vertical, o.Align.ShiftY)
+	y := place(area-lipgloss.Height(box), o.Align.Vertical, o.Align.ShiftY)
 	// A Layer's X/Y only take effect through a Compositor — drawn straight onto
 	// a Canvas it lands at the origin.
 	layers := lipgloss.NewCompositor(

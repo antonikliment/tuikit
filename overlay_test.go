@@ -231,3 +231,18 @@ func TestOverlayOpenFuncLaysOutAtFrameWidth(t *testing.T) {
 		t.Fatalf("Open after OpenFunc kept the layout: %q", o.Content())
 	}
 }
+
+func TestOverlayReserveBottomKeepsRowsClear(t *testing.T) {
+	o := testOverlay()
+	o.Align.ReserveBottom = 3
+	o.Open("t", strings.Repeat("row\n", 40))
+	lines := strings.Split(ansi.Strip(o.Render(background(40, 16), 40, 16)), "\n")
+	if len(lines) != 16 {
+		t.Fatalf("frame height %d, want 16", len(lines))
+	}
+	for _, line := range lines[13:] {
+		if line != strings.Repeat("x", 40) {
+			t.Fatalf("reserved row covered: %q", line)
+		}
+	}
+}
